@@ -1,3 +1,0 @@
-.cap { display: block; max-width: 100%; height: auto; overflow: visible; }
-.color { transition: fill .3s ease; }
-@media (prefers-reduced-motion: reduce) { .color { transition: none; } }

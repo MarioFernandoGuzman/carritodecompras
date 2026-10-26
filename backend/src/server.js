@@ -1,8 +1,6 @@
 import { app } from './app.js';
 import { env } from './config/env.js';
-import { sequelize } from './config/db.js';
-
-if (!env.JWT_SECRET) throw new Error('Configura JWT_SECRET con al menos 32 caracteres en backend/.env.');
+import { pool } from './config/db.js';
 
 const server = app.listen(env.PORT, () => {
   process.stdout.write(`API disponible en http://127.0.0.1:${env.PORT}\n`);
@@ -10,7 +8,7 @@ const server = app.listen(env.PORT, () => {
 
 function shutdown() {
   server.close(async () => {
-    await sequelize.close();
+    await pool.end();
     process.exitCode = 0;
   });
 }

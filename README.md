@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, Sequelize 6, MySQL y React 18. Incluye tienda, compra simulada y panel administrativo (fases 1–8). Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Setup inicial con Express, MySQL y React 18. Requiere Node.js **20.19+** (o 22.12+/24+) y npm. MySQL **8** es necesario para comprobar el pool; la página y `/api/salud` funcionan sin base de datos.
 
 ## Instalar y ejecutar
 
@@ -9,9 +9,7 @@ Desde la raíz, en PowerShell:
 ```powershell
 cd backend
 npm ci
-if (!(Test-Path .env)) { Copy-Item .env.example .env }
-node --input-type=module -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(48).toString("hex"))'
-# Copia el resultado en JWT_SECRET dentro de .env antes de iniciar el servidor.
+Copy-Item .env.example .env
 npm run dev
 ```
 
@@ -24,119 +22,28 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Abre [la aplicación](http://127.0.0.1:5173): Inicio muestra categorías y destacados; `/gorras` permite explorar el catálogo. La [API de salud](http://127.0.0.1:3000/api/salud) devuelve `{ "ok": true }`.
+Abre [la aplicación](http://127.0.0.1:5173). Debe mostrar **“Conexión con el servidor correcta.”**. El botón permite repetir la comprobación. La [API de salud](http://127.0.0.1:3000/api/salud) devuelve `{ "ok": true }`.
 
 Usa `127.0.0.1` en ambas direcciones. Si cambias puertos u origen, ajusta `PORT` y `FRONTEND_URL` en `backend/.env`, y `VITE_API_URL` en `frontend/.env`; reinicia los servidores.
 
-## Preparar MySQL y el administrador
+## Conexión MySQL
 
-Inicia MySQL y configura `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` y `DB_NAME=gorras_db` en `backend/.env`. Usa las credenciales de tu instancia local. La conexión usada para instalar necesita permisos para crear bases y tablas. Desde `backend/`:
+Inicia MySQL 8 y configura `DB_HOST`, `DB_PORT`, `DB_USER` y `DB_PASSWORD` en `backend/.env` con tus datos locales. Puedes dejar `DB_NAME` vacío en esta fase; no se crea ningún esquema. Ejecuta en `backend/`:
 
 ```powershell
-npm run db:setup
 npm run db:check
 ```
 
-`db:setup` ejecuta `database/schema.sql` y `database/seed.sql`: crea ambas bases y recrea las 10 tablas en `gorras_db`, con 4 categorías, 12 productos, 72 variantes y 71 movimientos iniciales. Incluye una variante agotada y dos con stock bajo. `db:check` verifica la conexión mediante `sequelize.authenticate()`; `/api/salud` comprueba solo Express.
-
-**Cada ejecución de `db:setup` elimina los datos de las tablas de `gorras_db`, incluidos los usuarios.** El esquema puede repetirse, pero los cambios de estructura no tienen rollback en MySQL; si falla, corrige la causa y vuelve a ejecutar el setup. Las semillas se cargan en una transacción.
-
-Completa `ADMIN_EMAIL`, `ADMIN_NOMBRE` y `ADMIN_PASSWORD` en `backend/.env`. Usa una contraseña de al menos 12 caracteres y máximo 72 bytes UTF-8 (límite de bcrypt). Ejecuta:
-
-```powershell
-npm run create-admin
-```
-
-Crea el administrador o, si el email ya existe, actualiza nombre y contraseña, le asigna rol `admin` y lo activa. Conserva su ID e historial. El hash usa bcrypt con costo 12; el script no muestra la contraseña ni el hash. Repite este comando después de recrear la base. Las credenciales se configuran localmente: no hay usuarios ni contraseñas en el SQL.
-
-## Acceso a datos con Sequelize
-
-Los diez modelos y sus asociaciones están en `backend/src/models/index.js`. Los repositorios usan `findAll`, `findOne`, `create`, `update`, `destroy`, `upsert`, agregaciones y asociaciones del ORM. `mysql2` permanece como controlador del dialecto MySQL. Los servicios conservan la arquitectura y usan transacciones administradas con bloqueos para carrito, compra, cancelación e inventario.
-
-**Si ya tienes la base final funcionando:** configura el `.env`, ejecuta `npm ci` en backend y frontend, después `npm run db:check` y arranca ambas aplicaciones. No ejecutes `db:setup` sobre datos que quieras conservar. Esta versión mantiene tablas, columnas y relaciones; no requiere convertir datos ni ejecuta `sync`, `alter` o `force` al arrancar. Para una instalación nueva usa el procedimiento de preparación anterior.
-
-El código de ejecución no contiene consultas SQL manuales. Solo el instalador `scripts/db-setup.js` ejecuta los archivos SQL de estructura y semillas; no se utiliza para atender peticiones. Las futuras modificaciones del esquema deben aplicarse con scripts versionados y respaldo previo.
-
-La API y las pantallas mantienen sus contratos. La búsqueda del catálogo ahora utiliza `Op.like` escapado: cada término separado por espacios debe aparecer en nombre o descripción. Coincide con fragmentos y admite términos cortos; `%` y `_` se buscan literalmente. Sustituye el comportamiento anterior de FULLTEXT por prefijos. Para catálogos grandes conviene evaluar un índice o servicio de búsqueda especializado.
-
-La conexión utiliza hora de Guatemala (`-06:00`) y desactiva el registro de SQL. Se fija `uuid` 11.1.1 únicamente dentro de Sequelize mediante `overrides` para corregir la vulnerabilidad detectada en la dependencia heredada, sin cambiar la API del proyecto.
+El comando ejecuta `SELECT 1` mediante el pool y termina con error si no conecta. `/api/salud` comprueba solo Express, no MySQL. El esquema `gorras_db`, los datos de ejemplo y sus scripts corresponden a la fase 2.
 
 ## Comprobar y construir
 
-Desde `backend/`, prepara primero las tablas de pruebas y ejecuta:
-
-```powershell
-npm run db:setup:test
-npm test
-npm run build
-```
-
-`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 13 pruebas de backend verifican integridad, autenticación, carrito, checkout y administración (autorización, creación de producto/variante y ajuste registrado). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
-
-## Autenticación
-
-Abre `/registro` para crear un cliente o `/ingresar` para iniciar sesión. La contraseña requiere 8 caracteres como mínimo, una letra y un número; bcrypt admite hasta 72 bytes. Registrarse también inicia sesión. El encabezado permite salir. Recarga la página para comprobar que la sesión persiste.
-
-Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` opcional), `POST /api/auth/login` (`email`, `password`), `POST /api/auth/logout` y `GET /api/auth/yo`. Las respuestas usan `{ ok, data | error }`; nunca incluyen hashes. Un intento de asignar `rol` desde el registro se rechaza con 422.
-
-`JWT_SECRET` debe ser aleatorio, de al menos 32 caracteres y quedar solo en `.env`. Cambiarlo invalida sesiones existentes. El JWT dura 8 horas y se guarda en cookie `httpOnly`, `sameSite=lax`, `secure` en producción. Cada petición protegida consulta el usuario activo y su rol en MySQL. El límite de `/api/auth/*` es de 100 solicitudes por IP cada 15 minutos.
-
-`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`, incluso en rutas administrativas desconocidas. Para acceder usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies.
-
-## Catálogo
-
-Rutas públicas: `GET /api/categorias`, `GET /api/productos` y `GET /api/productos/:slug`. Filtros: `categoria` (slug), `buscar`, `color` (nombre), `talla`, `min`, `max`, `orden` (`destacados`, `nuevos`, `precio_asc`, `precio_desc`), `pagina` y `limite` (máximo 48, predeterminado 12; la interfaz usa 6). Ejemplo: `/api/productos?categoria=dad-hat&min=100&max=160&orden=precio_asc`.
-
-La búsqueda usa los operadores de Sequelize descritos arriba. Solo se muestran productos activos con variantes activas. El listado devuelve productos con categoría, colores y estado agotado, más `paginacion`; usa consultas agrupadas y asociaciones, sin consultas por cada producto. Color y talla deben coincidir en una misma variante. El indicador agotado considera todas las variantes activas del producto, independientemente del filtro.
-
-Abre `/gorras`, aplica filtros, busca y usa Atrás: la URL conserva el estado. En móvil, Menú y Filtros abren paneles inferiores con cierre por Escape. En `/gorras/snapback-volcan`, el color negro tiene S/M agotada y deshabilitada; en Dad Hat Atitlán, verde jade L/XL muestra las últimas 2 unidades. Las gorras son SVG propios, sin imágenes externas.
-
-## Carrito
-
-Agrega una variante desde el detalle. El contador abre un drawer con cantidades, eliminar/deshacer, progreso al envío gratis y totales. `/carrito` ofrece el mismo contenido y permite vaciarlo. Se vuelve a comprobar stock al abrir, entrar a la página o recuperar el foco; las cantidades que ya no estén disponibles se ajustan con aviso. El carrito no reserva ni descuenta existencias.
-
-Visitantes: `localStorage` guarda solo IDs, cantidades y slugs; los precios y el stock se consultan al servidor. Al ingresar o registrarse se fusiona con el carrito de la cuenta y se elimina el local solo tras una respuesta correcta. La petición inicial se comparte durante el montaje doble de React StrictMode. Si el navegador bloquea el almacenamiento, se conserva en memoria y se avisa. Las cuentas admin no realizan compras.
-
-API de cliente autenticado: `GET /api/carrito`, `POST /api/carrito/items` (`varianteId`, `cantidad`), `PATCH /api/carrito/items/:id` (`cantidad`), `DELETE /api/carrito/items/:id`, `DELETE /api/carrito`, `POST /api/carrito/fusionar` (`items: [{ varianteId, cantidad }]`, máximo 100). Las mutaciones devuelven el carrito completo. Un exceso de stock devuelve 409 con `error.detalles.stock`; fusionar recorta e ignora variantes no disponibles.
-
-`GET /api/carrito/configuracion` es público para que el visitante use la misma tarifa y umbral que el servidor. Se definen únicamente en `backend/src/config/envio.js`: Q 25.00 y envío gratis desde Q 300.00. Un carrito vacío tiene envío cero. Los totales autenticados se calculan en centavos desde los precios de MySQL; el cliente no envía precios.
-
-Pagar dirige a `/checkout`: pide sesión y regresa después de ingresar. Sigue Datos → Pago → Confirmar. El pago es de demostración: tarjeta crea un pedido pagado y contra entrega uno pendiente. No se realiza ningún cargo.
-
-## Checkout y pedidos
-
-Como cliente, agrega una gorra, completa los datos de entrega y confirma. Para probar tarjeta usa `4242 4242 4242 4242` con vencimiento futuro (por ejemplo `12/30`). El navegador valida Luhn, marca Visa/Mastercard y fecha; al pasar a Confirmar descarta número/fecha y conserva solo marca y últimos 4. No se solicita CVV. La API rechaza campos ajenos al esquema, incluidos números completos, CVV o montos.
-
-`POST /api/pedidos` recibe `nombre_destinatario`, `telefono_contacto`, `direccion_envio`, `ciudad`, `notas` opcional, `metodo_pago` y, solo para tarjeta, `pago_marca`/`pago_ultimos4`. En una transacción bloquea usuario y variantes por ID ascendente, calcula importes desde MySQL, crea snapshots/código `VIS-000123`, descuenta stock, registra movimientos/historial y vacía el carrito. Una falta de stock devuelve 409 sin aplicar cambios y la interfaz vuelve al carrito con el aviso. Los errores inesperados también hacen rollback y devuelven un error genérico.
-
-`GET /api/pedidos` lista los propios; `GET /api/pedidos/:id` devuelve detalle, snapshots y línea de tiempo (404 para otro dueño). `POST /api/pedidos/:id/cancelar` permite pendiente/pagado, devuelve existencias y registra la devolución/estado en una transacción; repetir la cancelación devuelve 409. Las rutas requieren rol cliente.
-
-`/pedido/:codigo/confirmado` muestra el resumen y admite recarga. `/mis-pedidos` permite abrir detalles y cancelar con confirmación. El contador y el drawer se vacían al comprar.
-
-## Administración y pulido
-
-Configura `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_NOMBRE` en `backend/.env`, ejecuta `npm run create-admin` e ingresa por `/ingresar`. El panel `/admin` tiene resumen del mes, gráfica CSS de 7 días, pedidos recientes y alertas. Las secciones Productos, Inventario, Pedidos, Usuarios y Clientes permiten gestionar la tienda; en móvil se abren desde Secciones y las tablas tienen scroll horizontal contenido.
-
-API bajo `/api/admin`, siempre con autenticación y rol admin: `GET /resumen`; `GET/POST /productos`, `PUT/DELETE /productos/:id`; `POST /productos/:id/variantes`, `PUT/DELETE /variantes/:id`; `GET /inventario?bajo=1&agotado=1&buscar=`, `POST /inventario/ajuste`, `GET /inventario/movimientos`; `GET /pedidos?estado=&usuario=`, `GET /pedidos/:id`, `PATCH /pedidos/:id/estado`; `GET /usuarios`, `PATCH /usuarios/:id`, `GET /clientes`. Búsqueda mediante `buscar`; listados hasta 200 filas y bitácora hasta 100 movimientos, apropiados para la demo.
-
-Crear un producto incluye al menos una variante. El slug se genera y mantiene único; los cambios de stock registran entradas/ajustes con motivo. Eliminar conserva como inactivo lo que ya tiene pedidos; lo nunca vendido se elimina junto con sus referencias temporales de carrito y movimientos sin pedido. El inventario nunca puede quedar negativo.
-
-Estados administrativos: pendiente → pagado → enviado → entregado; cancelar se permite desde pendiente, pagado o enviado y devuelve las existencias una sola vez. El cliente solo cancela pendiente/pagado. El administrador no puede desactivarse ni quitarse su propio rol. Clientes muestra cantidad de pedidos, monto sin cancelados e historial individual.
-
-Cargas con esqueletos, estados vacíos/errores, avisos con presentación compartida (incluido Deshacer del carrito), página 404 y recuperación global ante fallos. Los modales permiten teclado y cierre con Escape, y se respeta movimiento reducido. Una respuesta 401/403 actualiza la sesión para aplicar cambios de acceso. La revisión visual fue una sola pasada, sin refinamiento de píxeles. La revisión final y documentación de entrega quedan para la fase posterior.
-
-En `frontend/`, ejecuta `npm test` (2 pruebas de reducer/totales y CartDrawer) y `npm run build`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
+Ejecuta `npm test` y `npm run build` en cada aplicación. Vitest está preparado con `--passWithNoTests`: esta fase todavía no incluye pruebas automatizadas. En backend, `build` valida la sintaxis de los puntos de entrada y configuración; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
 
 ## Estructura
 
-- `backend/`: API, configuración de Sequelize, modelos y carpetas para las capas del servidor.
+- `backend/`: API, configuración del pool y carpetas para las capas del servidor.
 - `frontend/`: React, cliente fetch con cookies, CSS Modules y variables CSS.
-- `database/`: estructura SQL repetible y datos de ejemplo sin credenciales.
+- `database/`: reservada para los SQL de la siguiente fase.
 
-Los `.gitkeep` conservan las carpetas pendientes. `AGENTS.md`, `CLAUDE.md`, `docs/`, `.env`, dependencias y builds quedan fuera de Git. La documentación del proceso se mantiene solo en `docs/` local.
-
-## Validación de la migración
-
-Verificado con Node.js 24 y MariaDB 11.4 local: 13 pruebas backend y 2 frontend, comprobación de sintaxis del backend y compilación Vite. Las pruebas incluyen integridad, permisos, compra, rollback, dos compradores compitiendo por el mismo stock y devolución única al cancelar. La ejecución directa contra MySQL 8 queda pendiente en el entorno de destino.
-
-Los manuales elaborados para la versión anterior deben actualizar su explicación de persistencia si se presentan junto con esta versión.
+Los `.gitkeep` conservan las carpetas pendientes. `AGENTS.md`, `CLAUDE.md`, `docs/`, `.env`, dependencias y builds quedan fuera de Git. `docs/` permanece vacía y solo local en esta fase.

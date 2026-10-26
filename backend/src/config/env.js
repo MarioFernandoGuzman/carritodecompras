@@ -9,8 +9,7 @@ const schema = z.object({
   DB_PORT: z.coerce.number().int().min(1).max(65535).default(3306),
   DB_USER: z.string().default(''),
   DB_PASSWORD: z.string().default(''),
-  DB_NAME: z.string().min(1).default('gorras_db'),
-  JWT_SECRET: z.preprocess((value) => value || undefined, z.string().min(32).optional()),
+  DB_NAME: z.string().default(''),
 });
 
 export const env = schema.parse(process.env);
