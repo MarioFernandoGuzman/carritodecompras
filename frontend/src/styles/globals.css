@@ -5,3 +5,9 @@ button { min-height: 44px; padding: .8rem 1.3rem; border: 0; border-radius: 999p
 button:disabled { opacity: .6; cursor: wait; }
 :focus-visible { outline: 3px solid var(--color-texto); outline-offset: 4px; }
 a { color: var(--color-jade); }
+main { max-width: 1200px; margin: auto; padding: 2rem 1.25rem; }
+h1, h2 { font-family: var(--fuente-titulos); }
+button:enabled:hover { filter: brightness(.92); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

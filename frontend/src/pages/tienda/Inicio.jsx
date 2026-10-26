@@ -20,7 +20,6 @@ export default function Inicio() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.brand}>{NOMBRE_TIENDA}<span>Hecho para tu día.</span></header>
       <section className={styles.intro} aria-labelledby="titulo">
         <p className={styles.eyebrow}>Tienda de gorras · Guatemala</p>
         <h1 id="titulo">Tu estilo empieza arriba.</h1>
@@ -34,7 +33,7 @@ export default function Inicio() {
           Volver a comprobar
         </button>
       </section>
-      <footer>Fase 1 · Configuración inicial</footer>
+      <footer>{NOMBRE_TIENDA} · Hecho para tu día.</footer>
     </main>
   );
 }
