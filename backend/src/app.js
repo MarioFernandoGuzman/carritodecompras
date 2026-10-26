@@ -10,6 +10,7 @@ import { authRateLimit } from './middlewares/rateLimit.js';
 import { catalogoRouter } from './routes/catalogo.routes.js';
 import { carritoRouter } from './routes/carrito.routes.js';
 import { pedidosRouter } from './routes/pedidos.routes.js';
+import { adminRouter } from './routes/admin.routes.js';
 
 export const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api/auth', authRateLimit, authRouter);
 app.use('/api', catalogoRouter);
 app.use('/api/carrito', carritoRouter);
 app.use('/api/pedidos', pedidosRouter);
+app.use('/api/admin', adminRouter);
 app.use((_req, res) => {
   res.status(404).json({ ok: false, error: { mensaje: 'Ruta no encontrada.' } });
 });

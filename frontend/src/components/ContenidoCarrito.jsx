@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext.jsx';
 import CapSvg from './CapSvg.jsx';
+import Carga from './Carga.jsx';
 import { moneda } from '../utils/moneda.js';
 import styles from './Carrito.module.css';
 
@@ -10,7 +11,7 @@ export default function ContenidoCarrito({ compacto = false }) {
   return <>
     {cart.error && <div className={styles.error} role="alert">{cart.error} <button onClick={cart.recargar} disabled={cart.ocupado}>Actualizar carrito</button></div>}
     {cart.avisos?.length > 0 && <div className={styles.avisos} role="status">{cart.avisos.map((aviso, index) => <p key={`${index}-${aviso}`}>{aviso}</p>)}</div>}
-    {cart.cargando ? <p role="status">Actualizando tu carrito…</p> : !cart.items.length ? <div className={styles.empty}><CapSvg estilo="dad" color="#1F6F54" tamano={220} /><h2>Tu carrito está esperando tu estilo.</h2><p>Elige una gorra y hazla parte de tu día.</p><Link className={styles.primary} to="/gorras" onClick={cart.cerrar}>Ver gorras ↗</Link></div> : <div className={compacto ? styles.compacto : styles.contenido}>
+    {cart.cargando ? <Carga texto="Actualizando tu carrito…"/> : !cart.items.length ? <div className={styles.empty}><CapSvg estilo="dad" color="#1F6F54" tamano={220} /><h2>Tu carrito está esperando tu estilo.</h2><p>Elige una gorra y hazla parte de tu día.</p><Link className={styles.primary} to="/gorras" onClick={cart.cerrar}>Ver gorras ↗</Link></div> : <div className={compacto ? styles.compacto : styles.contenido}>
       <section className={styles.lista} aria-label="Artículos del carrito">
         {cart.items.map((item) => <article key={item.varianteId} className={styles.item}>
           <Link className={styles.art} to={`/gorras/${item.slug}`} onClick={cart.cerrar} aria-label={`Ver ${item.nombre}`}><CapSvg color={item.color_hex} estilo={item.estilo} tamano="100%" /></Link>

@@ -4,13 +4,15 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { CartProvider } from './context/CartContext.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import Notificaciones from './components/Notificaciones.jsx';
 import './styles/tokens.css';
 import './styles/globals.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <ErrorBoundary><BrowserRouter><Notificaciones />
       <AuthProvider><CartProvider><App /></CartProvider></AuthProvider>
-    </BrowserRouter>
+    </BrowserRouter></ErrorBoundary>
   </React.StrictMode>,
 );

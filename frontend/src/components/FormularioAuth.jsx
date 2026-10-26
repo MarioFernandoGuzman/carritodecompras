@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { validarAuth } from '../utils/validarAuth.js';
 import { NOMBRE_TIENDA } from '../utils/constantes.js';
 import { useCart } from '../context/CartContext.jsx';
+import Carga from './Carga.jsx';
 import styles from './FormularioAuth.module.css';
 
 export default function FormularioAuth({ registro = false }) {
@@ -27,7 +28,7 @@ export default function FormularioAuth({ registro = false }) {
       && (!desde.startsWith('/admin') || actual.rol === 'admin') ? desde : actual.rol === 'admin' ? '/admin' : '/';
   }
 
-  if (cargando) return <main role="status">Recuperando tu sesión…</main>;
+  if (cargando) return <main><Carga texto="Recuperando tu sesión…"/></main>;
   if (usuario) return <Navigate to={destinoSesion(usuario)} replace />;
 
   async function submit(event) {

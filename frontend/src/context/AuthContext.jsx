@@ -13,6 +13,7 @@ function authReducer(_state, action) {
 export function AuthProvider({ children }) {
   const [estado, dispatch] = useReducer(authReducer, inicial);
   const [intento, setIntento] = useState(0);
+  useEffect(()=>{const revisar=()=>setIntento((value)=>value+1);window.addEventListener('visera:sesion',revisar);return()=>window.removeEventListener('visera:sesion',revisar);},[]);
 
   useEffect(() => {
     const controller = new AbortController();
