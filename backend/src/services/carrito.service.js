@@ -32,19 +32,23 @@ async function resumir(connection, carritoId, avisos = []) {
   const rows = carritoId ? await repository.leerItems(connection, carritoId) : [];
   const items = [];
   let subtotal = 0;
+  let ajustado = false;
   for (const row of rows) {
     const cantidad = row.activo && row.producto_activo ? Math.min(row.cantidad, row.stock) : 0;
     if (cantidad !== row.cantidad) {
+      ajustado = true;
       avisos.push(`${row.nombre}: ajustamos la cantidad de ${row.cantidad} a ${cantidad} por disponibilidad.`);
       if (cantidad) await repository.guardarItem(connection, carritoId, row.varianteId, cantidad);
       else await repository.eliminarItem(connection, carritoId, row.id);
     }
     if (!cantidad) continue;
     const centavos = Math.round(Number(row.precio_unitario) * 100) * cantidad;
+    if (!Number.isSafeInteger(centavos) || !Number.isSafeInteger(subtotal + centavos)) throw new HttpError(422, 'El importe del carrito supera el límite permitido.');
     subtotal += centavos;
     const { activo, producto_activo, categoria_slug, ...item } = row;
     items.push({ ...item, cantidad, estilo: estiloGorra(categoria_slug, row.slug), subtotal: dinero(centavos) });
   }
+  if (ajustado) await repository.actualizarFecha(connection, carritoId);
   const envio = !items.length || subtotal >= ENVIO_GRATIS_DESDE_CENTAVOS ? 0 : TARIFA_ENVIO_CENTAVOS;
   return { items, subtotal: dinero(subtotal), envio: dinero(envio), total: dinero(subtotal + envio),
     falta_envio_gratis: dinero(Math.max(0, ENVIO_GRATIS_DESDE_CENTAVOS - subtotal)), avisos };

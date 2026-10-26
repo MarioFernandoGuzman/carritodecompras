@@ -64,6 +64,10 @@ test('rechaza agregar o aumentar sobre el stock; fusionar recorta e ignora varia
   const fusion = await agent.post('/api/carrito/fusionar').send({ items: [{ varianteId, cantidad: 2 }, { varianteId: 4294967295, cantidad: 1 }] }).expect(200);
   expect(fusion.body.data.items[0].cantidad).toBe(3);
   expect(fusion.body.data.avisos.length).toBeGreaterThan(0);
+  await pool.execute('UPDATE variantes SET stock = 1 WHERE id = ?', [varianteId]);
+  const ajustado = await agent.get('/api/carrito').expect(200);
+  expect(ajustado.body.data.items[0].cantidad).toBe(1);
+  expect(ajustado.body.data.avisos.length).toBeGreaterThan(0);
   await agent.delete('/api/carrito').expect(200);
   expect((await agent.get('/api/carrito').expect(200)).body.data.items).toEqual([]);
 });
