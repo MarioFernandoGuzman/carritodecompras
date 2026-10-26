@@ -1,11 +1,10 @@
-import { pool } from '../src/config/db.js';
-
+import { sequelize } from "../src/config/db.js";
 try {
-  await pool.execute('SELECT 1');
-  process.stdout.write('Conexión con MySQL correcta.\n');
-} catch (error) {
-  console.error('No se pudo conectar con MySQL. Revisa el servicio y backend/.env.', error.code);
+  await sequelize.authenticate();
+  process.stdout.write("Conexión con MySQL mediante Sequelize correcta.\n");
+} catch {
+  console.error("No se pudo conectar. Revisa MySQL y backend/.env.");
   process.exitCode = 1;
 } finally {
-  await pool.end();
+  await sequelize.close();
 }

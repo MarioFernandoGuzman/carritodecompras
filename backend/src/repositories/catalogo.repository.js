@@ -1,83 +1,129 @@
-import { pool } from '../config/db.js';
-
-const ordenes = {
-  precio_asc: 'precio ASC, id ASC',
-  precio_desc: 'precio DESC, id DESC',
-  nuevos: 'creado_en DESC, id DESC',
-  destacados: 'destacado DESC, creado_en DESC, id DESC',
+import { Op } from "sequelize";
+import { Categoria, Producto, Variante } from "../models/index.js";
+import { categoryJoin, contains, productRow } from "./orm.js";
+const orders = {
+  precio_asc: [
+    ["precio", "ASC"],
+    ["id", "ASC"],
+  ],
+  precio_desc: [
+    ["precio", "DESC"],
+    ["id", "DESC"],
+  ],
+  nuevos: [
+    ["creado_en", "DESC"],
+    ["id", "DESC"],
+  ],
+  destacados: [
+    ["destacado", "DESC"],
+    ["creado_en", "DESC"],
+    ["id", "DESC"],
+  ],
 };
-const columnas = `p.id, p.nombre, p.slug, p.precio, p.destacado, p.creado_en,
-  c.id AS categoria_id, c.nombre AS categoria_nombre, c.slug AS categoria_slug`;
-
-export async function listarCategorias() {
-  const [rows] = await pool.execute('SELECT id, nombre, slug, descripcion FROM categorias ORDER BY id');
-  return rows;
-}
-
+export const listarCategorias = () =>
+  Categoria.findAll({ order: [["id", "ASC"]], raw: true });
 export async function listarProductos(query) {
-  const condiciones = ['p.activo = 1'];
-  const valores = [];
-  if (query.categoria) { condiciones.push('c.slug = ?'); valores.push(query.categoria); }
-  if (query.min !== undefined) { condiciones.push('p.precio >= ?'); valores.push(query.min); }
-  if (query.max !== undefined) { condiciones.push('p.precio <= ?'); valores.push(query.max); }
+  const variantWhere = { activo: 1 };
+  if (query.color) variantWhere.color_nombre = query.color;
+  if (query.talla) variantWhere.talla = query.talla;
+  const matching = await Variante.findAll({
+    attributes: ["producto_id"],
+    where: variantWhere,
+    group: ["producto_id"],
+    raw: true,
+  });
+  const where = {
+    activo: 1,
+    id: { [Op.in]: matching.map((v) => v.producto_id) },
+  };
+  if (query.min !== undefined || query.max !== undefined)
+    where.precio = {
+      ...(query.min !== undefined ? { [Op.gte]: query.min } : {}),
+      ...(query.max !== undefined ? { [Op.lte]: query.max } : {}),
+    };
   if (query.buscar) {
-    const palabras = query.buscar.match(/[\p{L}\p{N}]+/gu)?.filter((word) => word.length >= 3) || [];
-    if (palabras.length) {
-      condiciones.push('MATCH(p.nombre, p.descripcion) AGAINST(? IN BOOLEAN MODE)');
-      valores.push(palabras.map((word) => `+${word}*`).join(' '));
-    } else {
-      condiciones.push("(p.nombre LIKE ? ESCAPE '!' OR p.descripcion LIKE ? ESCAPE '!')");
-      const patron = `%${query.buscar.replace(/[!%_]/g, '!$&')}%`;
-      valores.push(patron, patron);
-    }
+    const words = query.buscar.trim().split(/\s+/u);
+    where[Op.and] = words.map((word) => ({
+      [Op.or]: [{ nombre: contains(word) }, { descripcion: contains(word) }],
+    }));
   }
-  const variante = ['v.producto_id = p.id', 'v.activo = 1'];
-  if (query.color) { variante.push('v.color_nombre = ?'); valores.push(query.color); }
-  if (query.talla) { variante.push('v.talla = ?'); valores.push(query.talla); }
-  condiciones.push(`EXISTS (SELECT 1 FROM variantes v WHERE ${variante.join(' AND ')})`);
-  const orden = ordenes[query.orden];
-  const [rows] = await pool.execute(
-    `WITH filtrados AS (
-       SELECT ${columnas},
-         NOT EXISTS (SELECT 1 FROM variantes v WHERE v.producto_id = p.id AND v.activo = 1 AND v.stock > 0) AS agotado
-       FROM productos p JOIN categorias c ON c.id = p.categoria_id
-       WHERE ${condiciones.join(' AND ')}
-     ), paginados AS (
-       SELECT * FROM filtrados ORDER BY ${orden} LIMIT ? OFFSET ?
-     )
-     SELECT paginados.*, conteo.total
-     FROM (SELECT COUNT(*) AS total FROM filtrados) conteo
-     LEFT JOIN paginados ON TRUE
-     ORDER BY ${orden}`,
-    [...valores, String(query.limite), String((query.pagina - 1) * query.limite)],
+  const include = [
+    {
+      ...categoryJoin,
+      ...(query.categoria ? { where: { slug: query.categoria } } : {}),
+    },
+  ];
+  const result = await Producto.findAndCountAll({
+    where,
+    include,
+    order: orders[query.orden] || orders.destacados,
+    limit: query.limite,
+    offset: (query.pagina - 1) * query.limite,
+    distinct: true,
+  });
+  const ids = result.rows.map((p) => p.id);
+  const stock = ids.length
+    ? await Variante.findAll({
+        attributes: ["producto_id", "stock"],
+        where: { producto_id: { [Op.in]: ids }, activo: 1 },
+        raw: true,
+      })
+    : [];
+  const available = new Set(
+    stock.filter((v) => v.stock > 0).map((v) => v.producto_id),
   );
-  return { rows: rows.filter((row) => row.id !== null), total: Number(rows[0].total) };
+  return {
+    rows: result.rows.map((p) => ({
+      ...productRow(p),
+      agotado: !available.has(p.id),
+    })),
+    total: result.count,
+  };
 }
-
 export async function coloresDeProductos(ids) {
   if (!ids.length) return [];
-  const [rows] = await pool.execute(
-    `SELECT producto_id, color_nombre AS nombre, color_hex AS hex, MAX(stock > 0) AS disponible
-     FROM variantes WHERE activo = 1 AND producto_id IN (${ids.map(() => '?').join(',')})
-     GROUP BY producto_id, color_nombre, color_hex ORDER BY MIN(id)`, ids,
-  );
-  return rows;
+  const rows = await Variante.findAll({
+    where: { producto_id: { [Op.in]: ids }, activo: 1 },
+    order: [["id", "ASC"]],
+    raw: true,
+  });
+  const groups = new Map();
+  for (const r of rows) {
+    const key = JSON.stringify([r.producto_id, r.color_nombre, r.color_hex]);
+    const old = groups.get(key);
+    groups.set(key, {
+      producto_id: r.producto_id,
+      nombre: r.color_nombre,
+      hex: r.color_hex,
+      disponible: Boolean(old?.disponible || r.stock > 0),
+    });
+  }
+  return [...groups.values()];
 }
-
 export async function buscarProducto(slug) {
-  const [[row]] = await pool.execute(
-    `SELECT ${columnas}, p.descripcion, p.material FROM productos p
-     JOIN categorias c ON c.id = p.categoria_id
-     WHERE p.slug = ? AND p.activo = 1
-       AND EXISTS (SELECT 1 FROM variantes v WHERE v.producto_id = p.id AND v.activo = 1)`, [slug],
-  );
-  return row;
+  const p = await Producto.findOne({
+    where: { slug, activo: 1 },
+    include: [categoryJoin],
+  });
+  if (
+    !p ||
+    !(await Variante.count({ where: { producto_id: p.id, activo: 1 } }))
+  )
+    return null;
+  return productRow(p);
 }
-
-export async function variantesDeProducto(id) {
-  const [rows] = await pool.execute(
-    `SELECT id, sku, color_nombre, color_hex, talla, stock, stock_minimo
-     FROM variantes WHERE producto_id = ? AND activo = 1 ORDER BY id`, [id],
-  );
-  return rows;
-}
+export const variantesDeProducto = (producto_id) =>
+  Variante.findAll({
+    where: { producto_id, activo: 1 },
+    attributes: [
+      "id",
+      "sku",
+      "color_nombre",
+      "color_hex",
+      "talla",
+      "stock",
+      "stock_minimo",
+    ],
+    order: [["id", "ASC"]],
+    raw: true,
+  });
