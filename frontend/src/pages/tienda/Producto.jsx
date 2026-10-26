@@ -4,8 +4,11 @@ import CapSvg from '../../components/CapSvg.jsx';
 import { useRecurso } from '../../utils/useRecurso.js';
 import { moneda } from '../../utils/moneda.js';
 import styles from '../../styles/catalogo.module.css';
+import { useCart } from '../../context/CartContext.jsx';
 
 function Detalle({ producto }) {
+  const { agregar, cargando, ocupado, items, config } = useCart();
+  const [error, setError] = useState('');
   const inicial = producto.variantes.find((v) => v.stock > 0) || producto.variantes[0];
   const [color, setColor] = useState(inicial.color_nombre);
   const [talla, setTalla] = useState(inicial.talla);
@@ -13,6 +16,14 @@ function Detalle({ producto }) {
   const tallas = [...new Set(producto.variantes.map((v) => v.talla))];
   const variante = producto.variantes.find((v) => v.color_nombre === color && v.talla === talla);
   const hex = colores.find((c) => c.nombre === color)?.hex;
+  const limite = variante && (items.find((i) => i.varianteId === variante.id)?.cantidad || 0) >= variante.stock;
+
+  async function anadir() {
+    if (!variante?.stock) return;
+    setError('');
+    try { await agregar({ varianteId: variante.id, slug: producto.slug }); }
+    catch (failure) { setError(failure.message); }
+  }
 
   function elegirColor(nombre) {
     setColor(nombre);
@@ -39,8 +50,9 @@ function Detalle({ producto }) {
           })}
         </div></fieldset>
         <p className={styles.stock} role="status">{producto.agotado ? 'Esta gorra está agotada por ahora.' : !variante?.stock ? 'Elige una variante disponible.' : variante.stock <= variante.stock_minimo ? `¡Últimas ${variante.stock} unidades!` : `${variante.stock} unidades disponibles`}</p>
-        <button className={styles.add} disabled aria-describedby="aviso-carrito">Agregar al carrito <span aria-hidden="true">↗</span></button><p id="aviso-carrito" className={styles.note}>Pronto podrás agregar tus favoritas al carrito.</p>
-        <dl className={styles.facts}><div><dt>Material</dt><dd>{producto.material || 'Sin especificar'}</dd></div><div><dt>Envío</dt><dd>Gratis desde Q 300.00</dd></div></dl>
+        <button className={styles.add} disabled={!variante?.stock || limite || cargando || ocupado} onClick={anadir} aria-describedby="aviso-carrito">{ocupado ? 'Actualizando…' : 'Agregar al carrito'} <span aria-hidden="true">↗</span></button><p id="aviso-carrito" className={styles.note}>{limite ? 'Ya tienes el stock disponible en tu carrito.' : 'Elige tu color y talla para agregar esta gorra.'}</p>
+        {error && <p role="alert">{error}</p>}
+        <dl className={styles.facts}><div><dt>Material</dt><dd>{producto.material || 'Sin especificar'}</dd></div><div><dt>Envío</dt><dd>{config ? `Gratis desde ${moneda(config.gratisDesde)}` : 'Consultando tarifa…'}</dd></div></dl>
       </section>
     </div>
   </>;

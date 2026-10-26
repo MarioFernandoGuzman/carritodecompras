@@ -3,9 +3,12 @@ import CapSvg from '../../components/CapSvg.jsx';
 import GridProductos from '../../components/GridProductos.jsx';
 import { useRecurso } from '../../utils/useRecurso.js';
 import { NOMBRE_TIENDA } from '../../utils/constantes.js';
+import { useCart } from '../../context/CartContext.jsx';
+import { moneda } from '../../utils/moneda.js';
 import styles from '../../styles/catalogo.module.css';
 
 export default function Inicio() {
+  const { config } = useCart();
   const destacados = useRecurso('/productos?orden=destacados&limite=4');
   const categorias = useRecurso('/categorias');
   const estilos = ['snapback', 'dad', 'trucker', 'bucket'];
@@ -20,7 +23,7 @@ export default function Inicio() {
         {categorias.error ? <div role="alert">{categorias.error} <button onClick={categorias.recargar}>Reintentar</button></div> : categorias.cargando ? <p role="status">Cargando categorías…</p> : <div className={styles.categories}>{categorias.data.map((c, index) => <Link key={c.id} to={`/gorras?categoria=${c.slug}`}><CapSvg estilo={estilos[index] || 'bucket'} color={['#14110F', '#E4572E', '#1F6F54', '#D8C3A5'][index % 4]} /><span>{c.nombre}<span aria-hidden="true">↗</span></span></Link>)}</div>}
       </section>
       <section className={styles.section} aria-labelledby="destacados-titulo"><div className={styles.sectionHead}><div><p className={styles.eyebrow}>PARA PONERTE EN MODO TÚ</p><h2 id="destacados-titulo">Se llevan las miradas.</h2></div><Link to="/gorras">Explorar catálogo ↗</Link></div><div className={styles.featured}><GridProductos productos={destacados.data?.productos} {...destacados} /></div></section>
-      <section className={styles.shipping}><div><p className={styles.eyebrow}>UN MOTIVO MÁS PARA ELEGIR</p><h2>Tu estilo llega más lejos.</h2><p>Envío gratis en compras desde <strong>Q 300.00</strong>.</p></div><Link to="/gorras">Explora las gorras <span aria-hidden="true">↗</span></Link></section>
+      <section className={styles.shipping}><div><p className={styles.eyebrow}>UN MOTIVO MÁS PARA ELEGIR</p><h2>Tu estilo llega más lejos.</h2><p>{config ? <>Envío gratis en compras desde <strong>{moneda(config.gratisDesde)}</strong>.</> : 'Consulta las opciones de envío al continuar.'}</p></div><Link to="/gorras">Explora las gorras <span aria-hidden="true">↗</span></Link></section>
     </main>
   );
 }

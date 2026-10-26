@@ -8,7 +8,7 @@
 .login span { color: var(--color-jade); font-size: 1.4rem; }
 .name { max-width: 13rem; overflow-wrap: anywhere; }
 .actions { display: flex; align-items: center; gap: .5rem; }
-.cart { color: var(--color-texto); background: transparent; min-width: 44px; padding: .5rem; display: flex; gap: .35rem; align-items: center; opacity: 1 !important; cursor: not-allowed !important; }
+.cart { color: var(--color-texto); background: transparent; min-width: 44px; padding: .5rem; display: flex; gap: .35rem; align-items: center; }
 .cart span { font-size: .7rem; }
 .desktop { display: none; }
 .row { gap: .65rem; }

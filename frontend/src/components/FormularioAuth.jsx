@@ -4,10 +4,12 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext.jsx';
 import { validarAuth } from '../utils/validarAuth.js';
 import { NOMBRE_TIENDA } from '../utils/constantes.js';
+import { useCart } from '../context/CartContext.jsx';
 import styles from './FormularioAuth.module.css';
 
 export default function FormularioAuth({ registro = false }) {
   const { usuario, cargando, ingresar, registrar } = useAuth();
+  const { ocupado: cartOcupado } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
   const reduced = useReducedMotion();
@@ -19,12 +21,18 @@ export default function FormularioAuth({ registro = false }) {
   const [visible, setVisible] = useState(false);
   const errors = { ...validarAuth(values, registro), ...serverFields };
 
+  function destinoSesion(actual) {
+    const desde = location.state?.desde;
+    return typeof desde === 'string' && desde.startsWith('/') && !desde.startsWith('//')
+      && (!desde.startsWith('/admin') || actual.rol === 'admin') ? desde : actual.rol === 'admin' ? '/admin' : '/';
+  }
+
   if (cargando) return <main role="status">Recuperando tu sesión…</main>;
-  if (usuario) return <Navigate to={usuario.rol === 'admin' ? '/admin' : '/'} replace />;
+  if (usuario) return <Navigate to={destinoSesion(usuario)} replace />;
 
   async function submit(event) {
     event.preventDefault();
-    if (enviando) return;
+    if (enviando || cartOcupado) return;
     setTouched({ nombre: true, email: true, password: true });
     setServerFields({});
     setError('');
@@ -33,10 +41,7 @@ export default function FormularioAuth({ registro = false }) {
     try {
       const datos = { email: values.email.trim(), password: values.password, ...(registro ? { nombre: values.nombre.trim() } : {}) };
       const actual = await (registro ? registrar(datos) : ingresar(datos));
-      const desde = location.state?.desde;
-      const destino = typeof desde === 'string' && desde.startsWith('/') && !desde.startsWith('//')
-        && (!desde.startsWith('/admin') || actual.rol === 'admin') ? desde : actual.rol === 'admin' ? '/admin' : '/';
-      navigate(destino, { replace: true });
+      navigate(destinoSesion(actual), { replace: true });
     } catch (failure) {
       setError(failure.message);
       setServerFields(Object.fromEntries((failure.detalles || []).map(({ campo, mensaje }) => [campo.split('.').at(-1), mensaje])));
@@ -84,7 +89,7 @@ export default function FormularioAuth({ registro = false }) {
         {field('email', 'Correo electrónico', 'email', 'email', 150)}
         {field('password', 'Contraseña', 'password', registro ? 'new-password' : 'current-password', registro ? 72 : 256)}
         {error && <p className={styles.alert} role="alert">{error}</p>}
-        <button className={styles.submit} type="submit" disabled={enviando}>{enviando ? 'Un momento…' : registro ? 'Crear mi cuenta' : 'Ingresar'}<span aria-hidden="true">↗</span></button>
+        <button className={styles.submit} type="submit" disabled={enviando || cartOcupado}>{enviando ? 'Un momento…' : registro ? 'Crear mi cuenta' : 'Ingresar'}<span aria-hidden="true">↗</span></button>
       </form>
       <p className={styles.switch}>{registro ? '¿Ya tienes cuenta?' : '¿Primera vez por aquí?'} <Link to={registro ? '/ingresar' : '/registro'} state={location.state}>{registro ? 'Ingresa' : 'Crea tu cuenta'}</Link></p>
       <Link className={styles.back} to="/">← Volver al inicio</Link>
