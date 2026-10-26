@@ -18,7 +18,7 @@ export async function leerItems(connection, carritoId) {
        p.activo AS producto_activo, c.slug AS categoria_slug, v.color_nombre, v.color_hex, v.talla, v.stock, v.activo
      FROM carrito_items ci JOIN variantes v ON v.id = ci.variante_id
      JOIN productos p ON p.id = v.producto_id JOIN categorias c ON c.id = p.categoria_id
-     WHERE ci.carrito_id = ? ORDER BY v.id FOR SHARE`, [carritoId],
+     WHERE ci.carrito_id = ? ORDER BY v.id`, [carritoId],
   );
   return rows;
 }
@@ -26,7 +26,7 @@ export async function leerItems(connection, carritoId) {
 export async function buscarVariante(connection, varianteId) {
   const [[row]] = await connection.execute(
     `SELECT v.id, v.stock, v.activo, p.activo AS producto_activo
-     FROM variantes v JOIN productos p ON p.id = v.producto_id WHERE v.id = ? FOR SHARE`, [varianteId],
+     FROM variantes v JOIN productos p ON p.id = v.producto_id WHERE v.id = ?`, [varianteId],
   );
   return row;
 }
