@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, MySQL y React 18. Fases 1 y 2: configuración inicial y base de datos. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Tienda de gorras con Express, MySQL y React 18. Fases 1–3: configuración, base de datos y autenticación. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
 
 ## Instalar y ejecutar
 
@@ -10,6 +10,8 @@ Desde la raíz, en PowerShell:
 cd backend
 npm ci
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
+node --input-type=module -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(48).toString("hex"))'
+# Copia el resultado en JWT_SECRET dentro de .env antes de iniciar el servidor.
 npm run dev
 ```
 
@@ -68,7 +70,17 @@ npm test
 npm run build
 ```
 
-`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 3 pruebas verifican CHECK/UNIQUE/FK y cascada, creación/actualización del administrador y rechazo de contraseñas inválidas. Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
+`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 6 pruebas verifican integridad, provisión del administrador, registro, login/cookie, usuarios inactivos, logout y permisos. Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
+
+## Autenticación
+
+Abre `/registro` para crear un cliente o `/ingresar` para iniciar sesión. La contraseña requiere 8 caracteres como mínimo, una letra y un número; bcrypt admite hasta 72 bytes. Registrarse también inicia sesión. El encabezado permite salir. Recarga la página para comprobar que la sesión persiste.
+
+Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` opcional), `POST /api/auth/login` (`email`, `password`), `POST /api/auth/logout` y `GET /api/auth/yo`. Las respuestas usan `{ ok, data | error }`; nunca incluyen hashes. Un intento de asignar `rol` desde el registro se rechaza con 422.
+
+`JWT_SECRET` debe ser aleatorio, de al menos 32 caracteres y quedar solo en `.env`. Cambiarlo invalida sesiones existentes. El JWT dura 8 horas y se guarda en cookie `httpOnly`, `sameSite=lax`, `secure` en producción. Cada petición protegida consulta el usuario activo y su rol en MySQL. El límite de `/api/auth/*` es de 100 solicitudes por IP cada 15 minutos.
+
+`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies. Catálogo y compra siguen pendientes.
 
 En `frontend/`, ejecuta `npm test` y `npm run build`. Aún no hay pruebas de interfaz: Vitest permite esa ausencia con `--passWithNoTests`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
 
