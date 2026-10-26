@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, MySQL y React 18. Incluye tienda, compra simulada y panel administrativo (fases 1–8). Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Tienda de gorras con Express, Sequelize 6, MySQL y React 18. Incluye tienda, compra simulada y panel administrativo (fases 1–8). Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
 
 ## Instalar y ejecutar
 
@@ -30,14 +30,14 @@ Usa `127.0.0.1` en ambas direcciones. Si cambias puertos u origen, ajusta `PORT`
 
 ## Preparar MySQL y el administrador
 
-Inicia MySQL y configura `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` y `DB_NAME=gorras_db` en `backend/.env`. En el entorno local indicado, el usuario es `root` y la contraseña está vacía. La conexión usada para instalar necesita permisos para crear bases y tablas. Desde `backend/`:
+Inicia MySQL y configura `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` y `DB_NAME=gorras_db` en `backend/.env`. Usa las credenciales de tu instancia local. La conexión usada para instalar necesita permisos para crear bases y tablas. Desde `backend/`:
 
 ```powershell
 npm run db:setup
 npm run db:check
 ```
 
-`db:setup` ejecuta `database/schema.sql` y `database/seed.sql`: crea ambas bases y recrea las 10 tablas en `gorras_db`, con 4 categorías, 12 productos, 72 variantes y 71 movimientos iniciales. Incluye una variante agotada y dos con stock bajo. `db:check` comprueba el pool con `SELECT 1`; `/api/salud` comprueba solo Express.
+`db:setup` ejecuta `database/schema.sql` y `database/seed.sql`: crea ambas bases y recrea las 10 tablas en `gorras_db`, con 4 categorías, 12 productos, 72 variantes y 71 movimientos iniciales. Incluye una variante agotada y dos con stock bajo. `db:check` verifica la conexión mediante `sequelize.authenticate()`; `/api/salud` comprueba solo Express.
 
 **Cada ejecución de `db:setup` elimina los datos de las tablas de `gorras_db`, incluidos los usuarios.** El esquema puede repetirse, pero los cambios de estructura no tienen rollback en MySQL; si falla, corrige la causa y vuelve a ejecutar el setup. Las semillas se cargan en una transacción.
 
@@ -49,16 +49,17 @@ npm run create-admin
 
 Crea el administrador o, si el email ya existe, actualiza nombre y contraseña, le asigna rol `admin` y lo activa. Conserva su ID e historial. El hash usa bcrypt con costo 12; el script no muestra la contraseña ni el hash. Repite este comando después de recrear la base. Las credenciales se configuran localmente: no hay usuarios ni contraseñas en el SQL.
 
-Ejemplo para consultar productos con sus variantes en MySQL:
+## Acceso a datos con Sequelize
 
-```sql
-USE gorras_db;
-SELECT p.nombre, p.precio, v.color_nombre, v.color_hex, v.talla, v.stock
-FROM productos AS p
-JOIN variantes AS v ON v.producto_id = p.id
-WHERE p.slug = 'snapback-volcan'
-ORDER BY v.id;
-```
+Los diez modelos y sus asociaciones están en `backend/src/models/index.js`. Los repositorios usan `findAll`, `findOne`, `create`, `update`, `destroy`, `upsert`, agregaciones y asociaciones del ORM. `mysql2` permanece como controlador del dialecto MySQL. Los servicios conservan la arquitectura y usan transacciones administradas con bloqueos para carrito, compra, cancelación e inventario.
+
+**Si ya tienes la base final funcionando:** configura el `.env`, ejecuta `npm ci` en backend y frontend, después `npm run db:check` y arranca ambas aplicaciones. No ejecutes `db:setup` sobre datos que quieras conservar. Esta versión mantiene tablas, columnas y relaciones; no requiere convertir datos ni ejecuta `sync`, `alter` o `force` al arrancar. Para una instalación nueva usa el procedimiento de preparación anterior.
+
+El código de ejecución no contiene consultas SQL manuales. Solo el instalador `scripts/db-setup.js` ejecuta los archivos SQL de estructura y semillas; no se utiliza para atender peticiones. Las futuras modificaciones del esquema deben aplicarse con scripts versionados y respaldo previo.
+
+La API y las pantallas mantienen sus contratos. La búsqueda del catálogo ahora utiliza `Op.like` escapado: cada término separado por espacios debe aparecer en nombre o descripción. Coincide con fragmentos y admite términos cortos; `%` y `_` se buscan literalmente. Sustituye el comportamiento anterior de FULLTEXT por prefijos. Para catálogos grandes conviene evaluar un índice o servicio de búsqueda especializado.
+
+La conexión utiliza hora de Guatemala (`-06:00`) y desactiva el registro de SQL. Se fija `uuid` 11.1.1 únicamente dentro de Sequelize mediante `overrides` para corregir la vulnerabilidad detectada en la dependencia heredada, sin cambiar la API del proyecto.
 
 ## Comprobar y construir
 
@@ -70,7 +71,7 @@ npm test
 npm run build
 ```
 
-`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 12 pruebas verifican integridad, autenticación, carrito, checkout y administración (autorización, creación de producto/variante y ajuste registrado). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
+`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 13 pruebas de backend verifican integridad, autenticación, carrito, checkout y administración (autorización, creación de producto/variante y ajuste registrado). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
 
 ## Autenticación
 
@@ -86,7 +87,7 @@ Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` 
 
 Rutas públicas: `GET /api/categorias`, `GET /api/productos` y `GET /api/productos/:slug`. Filtros: `categoria` (slug), `buscar`, `color` (nombre), `talla`, `min`, `max`, `orden` (`destacados`, `nuevos`, `precio_asc`, `precio_desc`), `pagina` y `limite` (máximo 48, predeterminado 12; la interfaz usa 6). Ejemplo: `/api/productos?categoria=dad-hat&min=100&max=160&orden=precio_asc`.
 
-La búsqueda usa FULLTEXT con prefijos de palabras de 3 o más caracteres y LIKE escapado para búsquedas cortas. Solo se muestran productos activos con variantes activas. El listado devuelve productos con categoría, colores y estado agotado, más `paginacion`; se resuelve con dos consultas, sin N+1. Color y talla deben coincidir en una misma variante. El indicador agotado considera todas las variantes activas del producto, independientemente del filtro.
+La búsqueda usa los operadores de Sequelize descritos arriba. Solo se muestran productos activos con variantes activas. El listado devuelve productos con categoría, colores y estado agotado, más `paginacion`; usa consultas agrupadas y asociaciones, sin consultas por cada producto. Color y talla deben coincidir en una misma variante. El indicador agotado considera todas las variantes activas del producto, independientemente del filtro.
 
 Abre `/gorras`, aplica filtros, busca y usa Atrás: la URL conserva el estado. En móvil, Menú y Filtros abren paneles inferiores con cierre por Escape. En `/gorras/snapback-volcan`, el color negro tiene S/M agotada y deshabilitada; en Dad Hat Atitlán, verde jade L/XL muestra las últimas 2 unidades. Las gorras son SVG propios, sin imágenes externas.
 
@@ -128,8 +129,14 @@ En `frontend/`, ejecuta `npm test` (2 pruebas de reducer/totales y CartDrawer) y
 
 ## Estructura
 
-- `backend/`: API, configuración del pool y carpetas para las capas del servidor.
+- `backend/`: API, configuración de Sequelize, modelos y carpetas para las capas del servidor.
 - `frontend/`: React, cliente fetch con cookies, CSS Modules y variables CSS.
 - `database/`: estructura SQL repetible y datos de ejemplo sin credenciales.
 
 Los `.gitkeep` conservan las carpetas pendientes. `AGENTS.md`, `CLAUDE.md`, `docs/`, `.env`, dependencias y builds quedan fuera de Git. La documentación del proceso se mantiene solo en `docs/` local.
+
+## Validación de la migración
+
+Verificado con Node.js 24 y MariaDB 11.4 local: 13 pruebas backend y 2 frontend, comprobación de sintaxis del backend y compilación Vite. Las pruebas incluyen integridad, permisos, compra, rollback, dos compradores compitiendo por el mismo stock y devolución única al cancelar. La ejecución directa contra MySQL 8 queda pendiente en el entorno de destino.
+
+Los manuales elaborados para la versión anterior deben actualizar su explicación de persistencia si se presentan junto con esta versión.

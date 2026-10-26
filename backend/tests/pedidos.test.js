@@ -1,89 +1,140 @@
-import { randomUUID } from 'node:crypto';
-import bcrypt from 'bcrypt';
-import request from 'supertest';
-import { beforeAll, afterAll, afterEach, expect, test } from 'vitest';
-import { app } from '../src/app.js';
-import { pool } from '../src/config/db.js';
-import { env } from '../src/config/env.js';
-
-const clave = randomUUID();
-const agent = request.agent(app);
-const otro = request.agent(app);
-const datos = { nombre_destinatario: 'Cliente prueba', telefono_contacto: '55551234', direccion_envio: 'Avenida de prueba 123', ciudad: 'Guatemala', metodo_pago: 'tarjeta', pago_marca: 'visa', pago_ultimos4: '4242' };
-let usuarioId, otroId, categoriaId, productoId, varianteA, varianteB;
-
-beforeAll(async () => {
-  if (env.DB_NAME !== 'gorras_test') throw new Error('Las pruebas solo pueden usar gorras_test.');
-  const password = `Clave1-${clave}`;
-  const hash = await bcrypt.hash(password, 12);
-  const [u] = await pool.execute('INSERT INTO usuarios (nombre, email, password_hash) VALUES (?, ?, ?)', ['Comprador', `pedido-${clave}@example.test`, hash]);
-  usuarioId = u.insertId;
-  const [o] = await pool.execute('INSERT INTO usuarios (nombre, email, password_hash) VALUES (?, ?, ?)', ['Otro', `otro-${clave}@example.test`, hash]);
-  otroId = o.insertId;
-  const [cat] = await pool.execute('INSERT INTO categorias (nombre, slug) VALUES (?, ?)', [`Pedidos ${clave}`, `pedidos-${clave}`]);
-  categoriaId = cat.insertId;
-  const [p] = await pool.execute('INSERT INTO productos (categoria_id, nombre, slug, precio) VALUES (?, ?, ?, ?)', [categoriaId, 'Gorra snapshot', `gorra-${clave}`, '149.00']);
-  productoId = p.insertId;
-  for (const [color, hex] of [['Negro', '#14110F'], ['Jade', '#1F6F54']]) {
-    const [v] = await pool.execute('INSERT INTO variantes (producto_id, sku, color_nombre, color_hex, talla, stock) VALUES (?, ?, ?, ?, ?, ?)', [productoId, `${color}-${clave}`, color, hex, 'S/M', 5]);
-    if (color === 'Negro') varianteA = v.insertId; else varianteB = v.insertId;
-  }
-  await agent.post('/api/auth/login').send({ email: `pedido-${clave}@example.test`, password }).expect(200);
-  await otro.post('/api/auth/login').send({ email: `otro-${clave}@example.test`, password }).expect(200);
+import { expect, test } from "vitest";
+import { fixture, M, delivery, request, app } from "./fixture.js";
+async function buy(f, method = "contra_entrega") {
+  await f.client
+    .post("/api/carrito/items")
+    .send({ varianteId: f.variants[0].id, cantidad: 2 })
+    .expect(201);
+  return (
+    await f.client
+      .post("/api/pedidos")
+      .send({
+        ...delivery,
+        metodo_pago: method,
+        ...(method === "tarjeta"
+          ? { pago_marca: "visa", pago_ultimos4: "4242" }
+          : {}),
+      })
+      .expect(201)
+  ).body.data;
+}
+test("checkout conserva snapshots, descuenta stock, registra historial y vacía el carrito", async () => {
+  const f = await fixture(),
+    p = await buy(f, "tarjeta");
+  expect(p.estado).toBe("pagado");
+  expect(p.total).toBe("323.00");
+  await M.Producto.update(
+    { nombre: "Nombre posterior", precio: "1.00" },
+    { where: { id: f.product.id } },
+  );
+  const detail = await f.client.get(`/api/pedidos/${p.id}`).expect(200);
+  expect(detail.body.data.items[0].nombre_producto).toBe(f.product.nombre);
+  expect(detail.body.data.items[0].precio_unitario).toBe("149.00");
+  expect((await M.Variante.findByPk(f.variants[0].id)).stock).toBe(3);
+  expect(
+    await M.MovimientoInventario.count({
+      where: { pedido_id: p.id, tipo: "salida_venta" },
+    }),
+  ).toBe(1);
+  expect(
+    await M.HistorialEstadoPedido.count({ where: { pedido_id: p.id } }),
+  ).toBe(1);
+  expect((await f.client.get("/api/carrito")).body.data.items).toEqual([]);
+  const other = request.agent(app);
+  await other
+    .post("/api/auth/login")
+    .send({ email: f.users[2].email, password: f.password })
+    .expect(200);
+  await other.get(`/api/pedidos/${p.id}`).expect(404);
 });
+test("stock insuficiente revierte pedido, movimientos y carrito", async () => {
+  const f = await fixture();
+  await f.client
+    .post("/api/carrito/items")
+    .send({ varianteId: f.variants[0].id, cantidad: 5 })
+    .expect(201);
+  await M.Variante.update({ stock: 1 }, { where: { id: f.variants[0].id } });
+  await f.client.post("/api/pedidos").send(delivery).expect(409);
+  expect(await M.Pedido.count({ where: { usuario_id: f.users[0].id } })).toBe(
+    0,
+  );
+  expect((await M.Variante.findByPk(f.variants[0].id)).stock).toBe(1);
+  const cart = await M.Carrito.findOne({
+    where: { usuario_id: f.users[0].id },
+  });
+  expect(
+    (await M.CarritoItem.findOne({ where: { carrito_id: cart.id } })).cantidad,
+  ).toBe(5);
+  expect(
+    await M.MovimientoInventario.count({
+      where: { usuario_id: f.users[0].id },
+    }),
+  ).toBe(0);
 
-afterEach(async () => {
-  if (!usuarioId) return;
-  await pool.execute('DELETE h FROM historial_estado_pedido h JOIN pedidos p ON p.id = h.pedido_id WHERE p.usuario_id = ?', [usuarioId]);
-  await pool.execute('DELETE m FROM movimientos_inventario m JOIN pedidos p ON p.id = m.pedido_id WHERE p.usuario_id = ?', [usuarioId]);
-  await pool.execute('DELETE FROM pedidos WHERE usuario_id = ?', [usuarioId]);
-  await pool.execute('DELETE FROM carritos WHERE usuario_id = ?', [usuarioId]);
-  if (productoId) {
-    await pool.execute('UPDATE variantes SET stock = 5 WHERE producto_id = ?', [productoId]);
-    await pool.execute('UPDATE productos SET nombre = ?, precio = ? WHERE id = ?', ['Gorra snapshot', '149.00', productoId]);
-  }
+  // Two different buyers compete for three units; only one checkout may commit.
+  await M.Variante.update({ stock: 3 }, { where: { id: f.variants[0].id } });
+  await M.CarritoItem.update(
+    { cantidad: 2 },
+    { where: { carrito_id: cart.id } },
+  );
+  const other = request.agent(app);
+  await other
+    .post("/api/auth/login")
+    .send({ email: f.users[2].email, password: f.password })
+    .expect(200);
+  await other
+    .post("/api/carrito/items")
+    .send({ varianteId: f.variants[0].id, cantidad: 2 })
+    .expect(201);
+  const results = await Promise.all([
+    f.client.post("/api/pedidos").send(delivery),
+    other.post("/api/pedidos").send(delivery),
+  ]);
+  expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+  expect((await M.Variante.findByPk(f.variants[0].id)).stock).toBe(1);
+  const loser = results[0].status === 409 ? f.users[0].id : f.users[2].id;
+  const pending = await M.Carrito.findOne({ where: { usuario_id: loser } });
+  expect(
+    (await M.CarritoItem.findOne({ where: { carrito_id: pending.id } }))
+      .cantidad,
+  ).toBe(2);
+  expect(
+    await M.MovimientoInventario.count({
+      where: { variante_id: f.variants[0].id, tipo: "salida_venta" },
+    }),
+  ).toBe(1);
 });
-afterAll(async () => {
-  try {
-    if (usuarioId) await pool.execute('DELETE FROM usuarios WHERE id IN (?, ?)', [usuarioId, otroId]);
-    if (productoId) await pool.execute('DELETE FROM productos WHERE id = ?', [productoId]);
-    if (categoriaId) await pool.execute('DELETE FROM categorias WHERE id = ?', [categoriaId]);
-  } finally { await pool.end(); }
-});
-
-test('checkout crea snapshots, descuenta stock, registra movimiento e historial y vacía el carrito', async () => {
-  await agent.post('/api/carrito/items').send({ varianteId: varianteA, cantidad: 2 }).expect(201);
-  await agent.post('/api/pedidos').send({ ...datos, total: 0 }).expect(422);
-  const { body } = await agent.post('/api/pedidos').send(datos).expect(201);
-  const pedido = body.data;
-  expect(pedido).toMatchObject({ codigo: `VIS-${String(pedido.id).padStart(6, '0')}`, estado: 'pagado', subtotal: '298.00', envio: '25.00', total: '323.00', pago_marca: 'visa', pago_ultimos4: '4242' });
-  expect(pedido.items[0]).toMatchObject({ nombre_producto: 'Gorra snapshot', color_nombre: 'Negro', color_hex: '#14110F', talla: 'S/M', precio_unitario: '149.00', cantidad: 2, subtotal: '298.00' });
-  expect(pedido.historial.map((h) => h.estado)).toEqual(['pagado']);
-  const [[{ stock }]] = await pool.execute('SELECT stock FROM variantes WHERE id = ?', [varianteA]);
-  expect(stock).toBe(3);
-  const [movimientos] = await pool.execute('SELECT tipo, cantidad, stock_resultante FROM movimientos_inventario WHERE pedido_id = ?', [pedido.id]);
-  expect(movimientos).toEqual([{ tipo: 'salida_venta', cantidad: -2, stock_resultante: 3 }]);
-  expect((await agent.get('/api/carrito').expect(200)).body.data.items).toEqual([]);
-  await pool.execute('UPDATE productos SET nombre = ?, precio = ? WHERE id = ?', ['Nombre cambiado', '199.00', productoId]);
-  const historico = await agent.get(`/api/pedidos/${pedido.id}`).expect(200);
-  expect(historico.body.data.items[0]).toMatchObject({ nombre_producto: 'Gorra snapshot', precio_unitario: '149.00' });
-  await otro.get(`/api/pedidos/${pedido.id}`).expect(404);
-  await otro.post(`/api/pedidos/${pedido.id}/cancelar`).send({}).expect(404);
-});
-
-test('checkout sin stock responde 409 y conserva stock, carrito y todas las tablas del pedido', async () => {
-  await agent.post('/api/carrito/items').send({ varianteId: varianteA, cantidad: 1 }).expect(201);
-  await agent.post('/api/carrito/items').send({ varianteId: varianteB, cantidad: 3 }).expect(201);
-  await pool.execute('UPDATE variantes SET stock = 2 WHERE id = ?', [varianteB]);
-  const fallo = await agent.post('/api/pedidos').send({ ...datos, metodo_pago: 'contra_entrega', pago_marca: null, pago_ultimos4: null }).expect(409);
-  expect(fallo.body.error.detalles).toMatchObject({ varianteId: varianteB, stock: 2, solicitadas: 3 });
-  const [stocks] = await pool.execute('SELECT stock FROM variantes WHERE producto_id = ? ORDER BY id', [productoId]);
-  expect(stocks.map((v) => v.stock)).toEqual([5, 2]);
-  const [items] = await pool.execute('SELECT ci.cantidad FROM carrito_items ci JOIN carritos c ON c.id = ci.carrito_id WHERE c.usuario_id = ? ORDER BY ci.variante_id', [usuarioId]);
-  expect(items.map((i) => i.cantidad)).toEqual([1, 3]);
-  const [[counts]] = await pool.execute(`SELECT (SELECT COUNT(*) FROM pedidos WHERE usuario_id = ?) pedidos,
-    (SELECT COUNT(*) FROM movimientos_inventario WHERE variante_id IN (?, ?)) movimientos,
-    (SELECT COUNT(*) FROM historial_estado_pedido WHERE usuario_id = ?) historial,
-    (SELECT COUNT(*) FROM pedido_items pi JOIN pedidos p ON p.id = pi.pedido_id WHERE p.usuario_id = ?) items`, [usuarioId, varianteA, varianteB, usuarioId, usuarioId]);
-  expect(counts).toEqual({ pedidos: 0, movimientos: 0, historial: 0, items: 0 });
+test("cancelaciones y transiciones conservan permisos y devuelven existencias una sola vez", async () => {
+  const f = await fixture(),
+    p = await buy(f);
+  await f.admin
+    .patch(`/api/admin/pedidos/${p.id}/estado`)
+    .send({ estado: "enviado" })
+    .expect(409);
+  await f.admin
+    .patch(`/api/admin/pedidos/${p.id}/estado`)
+    .send({ estado: "pagado" })
+    .expect(200);
+  await f.admin
+    .patch(`/api/admin/pedidos/${p.id}/estado`)
+    .send({ estado: "enviado" })
+    .expect(200);
+  await f.client.post(`/api/pedidos/${p.id}/cancelar`).send({}).expect(409);
+  await f.admin
+    .patch(`/api/admin/pedidos/${p.id}/estado`)
+    .send({ estado: "cancelado" })
+    .expect(200);
+  await f.admin
+    .patch(`/api/admin/pedidos/${p.id}/estado`)
+    .send({ estado: "cancelado" })
+    .expect(409);
+  expect((await M.Variante.findByPk(f.variants[0].id)).stock).toBe(5);
+  expect(
+    await M.MovimientoInventario.count({
+      where: { pedido_id: p.id, tipo: "devolucion_cancelacion" },
+    }),
+  ).toBe(1);
+  const again = await buy(f);
+  await f.client.post(`/api/pedidos/${again.id}/cancelar`).send({}).expect(200);
+  expect((await M.Variante.findByPk(f.variants[0].id)).stock).toBe(5);
 });

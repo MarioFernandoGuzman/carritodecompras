@@ -1,100 +1,187 @@
-import { pool } from '../config/db.js';
-
-export async function itemsCarrito(connection, carritoId) {
-  const [rows] = await connection.execute('SELECT variante_id, cantidad FROM carrito_items WHERE carrito_id = ? ORDER BY variante_id', [carritoId]);
-  return rows;
-}
-
-export async function bloquearVariante(connection, id) {
-  const [[row]] = await connection.execute('SELECT id, producto_id, stock, activo FROM variantes WHERE id = ? FOR UPDATE', [id]);
-  return row;
-}
-
-export async function datosVariante(connection, id) {
-  const [[row]] = await connection.execute(
-    `SELECT p.nombre, p.precio, p.activo AS producto_activo, v.color_nombre, v.color_hex, v.talla
-     FROM variantes v JOIN productos p ON p.id = v.producto_id WHERE v.id = ? FOR SHARE`, [id],
+import { Op, fn, col } from "sequelize";
+import {
+  CarritoItem,
+  Producto,
+  Variante,
+  Pedido,
+  PedidoItem,
+  MovimientoInventario,
+  HistorialEstadoPedido,
+} from "../models/index.js";
+import { options, plain, productJoin } from "./orm.js";
+export const itemsCarrito = (t, carrito_id) =>
+  CarritoItem.findAll({
+    ...options(t),
+    where: { carrito_id },
+    attributes: ["variante_id", "cantidad"],
+    order: [["variante_id", "ASC"]],
+    raw: true,
+  });
+export const bloquearVariante = (t, id) =>
+  Variante.findByPk(id, {
+    ...options(t, true),
+    attributes: ["id", "producto_id", "stock", "activo"],
+    raw: true,
+  });
+export async function datosVariante(t, id) {
+  const v = plain(
+    await Variante.findByPk(id, {
+      ...options(t),
+      attributes: ["producto_id", "color_nombre", "color_hex", "talla"],
+    }),
   );
-  return row;
+  // La variante ya está bloqueada; el producto se bloquea después para mantener el orden.
+  if (!v) return null;
+  const p = await Producto.findByPk(v.producto_id, {
+    transaction: t,
+    lock: t.LOCK.SHARE,
+    raw: true,
+  });
+  return {
+    nombre: p.nombre,
+    precio: p.precio,
+    producto_activo: p.activo,
+    color_nombre: v.color_nombre,
+    color_hex: v.color_hex,
+    talla: v.talla,
+  };
 }
-
-export async function crearPedido(connection, usuarioId, datos, importes, codigoTemporal, estado) {
-  const [result] = await connection.execute(
-    `INSERT INTO pedidos (usuario_id, codigo, estado, subtotal, envio, total, nombre_destinatario,
-       telefono_contacto, direccion_envio, ciudad, notas, metodo_pago, pago_marca, pago_ultimos4)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [usuarioId, codigoTemporal, estado, importes.subtotal, importes.envio, importes.total, datos.nombre_destinatario,
-      datos.telefono_contacto, datos.direccion_envio, datos.ciudad, datos.notas, datos.metodo_pago,
-      datos.pago_marca || null, datos.pago_ultimos4 || null],
+export async function crearPedido(
+  t,
+  usuario_id,
+  datos,
+  importes,
+  codigo,
+  estado,
+) {
+  return (
+    await Pedido.create(
+      { ...datos, ...importes, usuario_id, codigo, estado },
+      options(t),
+    )
+  ).id;
+}
+export const asignarCodigo = (t, id, codigo) =>
+  Pedido.update({ codigo }, { ...options(t), where: { id } });
+export const crearItem = (t, pedido_id, i) =>
+  PedidoItem.create(
+    {
+      pedido_id,
+      variante_id: i.variante_id,
+      nombre_producto: i.nombre,
+      color_nombre: i.color_nombre,
+      color_hex: i.color_hex,
+      talla: i.talla,
+      precio_unitario: i.precio_unitario,
+      cantidad: i.cantidad,
+      subtotal: i.subtotal,
+    },
+    options(t),
   );
-  return result.insertId;
-}
-
-export async function asignarCodigo(connection, id, codigo) {
-  await connection.execute('UPDATE pedidos SET codigo = ? WHERE id = ?', [codigo, id]);
-}
-
-export async function crearItem(connection, pedidoId, item) {
-  await connection.execute(
-    `INSERT INTO pedido_items (pedido_id, variante_id, nombre_producto, color_nombre, color_hex, talla, precio_unitario, cantidad, subtotal)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [pedidoId, item.variante_id, item.nombre, item.color_nombre, item.color_hex, item.talla, item.precio_unitario, item.cantidad, item.subtotal],
+export const cambiarStock = (t, id, cantidad) =>
+  Variante.increment({ stock: cantidad }, { ...options(t), where: { id } });
+export const movimiento = (
+  t,
+  { varianteId, tipo, cantidad, stock, usuarioId, pedidoId, motivo = null },
+) =>
+  MovimientoInventario.create(
+    {
+      variante_id: varianteId,
+      tipo,
+      cantidad,
+      stock_resultante: stock,
+      usuario_id: usuarioId,
+      pedido_id: pedidoId,
+      motivo,
+    },
+    options(t),
   );
-}
-
-export async function cambiarStock(connection, varianteId, cantidad) {
-  await connection.execute('UPDATE variantes SET stock = stock + ? WHERE id = ?', [cantidad, varianteId]);
-}
-
-export async function movimiento(connection, { varianteId, tipo, cantidad, stock, usuarioId, pedidoId, motivo = null }) {
-  await connection.execute(
-    `INSERT INTO movimientos_inventario (variante_id, tipo, cantidad, stock_resultante, usuario_id, pedido_id, motivo)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`, [varianteId, tipo, cantidad, stock, usuarioId, pedidoId, motivo],
+export const historial = (t, pedido_id, estado, usuario_id) =>
+  HistorialEstadoPedido.create({ pedido_id, estado, usuario_id }, options(t));
+export async function listar(usuario_id) {
+  const rows = await Pedido.findAll({
+    where: { usuario_id },
+    order: [
+      ["creado_en", "DESC"],
+      ["id", "DESC"],
+    ],
+    raw: true,
+  });
+  if (!rows.length) return [];
+  const counts = await PedidoItem.findAll({
+    attributes: [
+      "pedido_id",
+      [fn("SUM", col("cantidad")), "cantidad_articulos"],
+    ],
+    where: { pedido_id: { [Op.in]: rows.map((r) => r.id) } },
+    group: ["pedido_id"],
+    raw: true,
+  });
+  const map = new Map(
+    counts.map((r) => [r.pedido_id, Number(r.cantidad_articulos)]),
   );
+  return rows.map(({ id, codigo, estado, total, creado_en }) => ({
+    id,
+    codigo,
+    estado,
+    total,
+    creado_en,
+    cantidad_articulos: map.get(id) || 0,
+  }));
 }
-
-export async function historial(connection, pedidoId, estado, usuarioId) {
-  await connection.execute('INSERT INTO historial_estado_pedido (pedido_id, estado, usuario_id) VALUES (?, ?, ?)', [pedidoId, estado, usuarioId]);
+const detailFields = [
+  "id",
+  "codigo",
+  "estado",
+  "subtotal",
+  "envio",
+  "total",
+  "nombre_destinatario",
+  "telefono_contacto",
+  "direccion_envio",
+  "ciudad",
+  "notas",
+  "metodo_pago",
+  "pago_marca",
+  "pago_ultimos4",
+  "creado_en",
+  "actualizado_en",
+];
+export const buscar = (t, usuario_id, id, lock = false) =>
+  Pedido.findOne({
+    ...options(t, lock),
+    where: { id, usuario_id },
+    attributes: detailFields,
+    raw: true,
+  });
+export async function itemsPedido(t, pedido_id) {
+  const rows = await PedidoItem.findAll({
+    ...options(t),
+    where: { pedido_id },
+    include: [
+      { association: "variante", required: true, include: [productJoin] },
+    ],
+    order: [["variante_id", "ASC"]],
+  });
+  return rows.map((v) => {
+    const { variante, ...r } = plain(v);
+    return {
+      ...r,
+      slug: variante.producto.slug,
+      categoria_slug: variante.producto.categoria.slug,
+    };
+  });
 }
-
-export async function listar(usuarioId) {
-  const [rows] = await pool.execute(
-    `SELECT p.id, p.codigo, p.estado, p.total, p.creado_en, COALESCE(SUM(pi.cantidad), 0) AS cantidad_articulos
-     FROM pedidos p LEFT JOIN pedido_items pi ON pi.pedido_id = p.id
-     WHERE p.usuario_id = ? GROUP BY p.id ORDER BY p.creado_en DESC, p.id DESC`, [usuarioId],
-  );
-  return rows;
-}
-
-export async function buscar(connection, usuarioId, id, bloquear = false) {
-  const [[row]] = await connection.execute(
-    `SELECT id, codigo, estado, subtotal, envio, total, nombre_destinatario, telefono_contacto, direccion_envio,
-      ciudad, notas, metodo_pago, pago_marca, pago_ultimos4, creado_en, actualizado_en
-     FROM pedidos WHERE id = ? AND usuario_id = ?${bloquear ? ' FOR UPDATE' : ''}`, [id, usuarioId],
-  );
-  return row;
-}
-
-export async function itemsPedido(connection, pedidoId) {
-  const [rows] = await connection.execute(
-    `SELECT pi.*, p.slug, c.slug AS categoria_slug
-     FROM pedido_items pi JOIN variantes v ON v.id = pi.variante_id
-     JOIN productos p ON p.id = v.producto_id JOIN categorias c ON c.id = p.categoria_id
-     WHERE pi.pedido_id = ? ORDER BY pi.variante_id`, [pedidoId],
-  );
-  return rows;
-}
-
-export async function historialPedido(connection, pedidoId) {
-  const [rows] = await connection.execute('SELECT id, estado, creado_en FROM historial_estado_pedido WHERE pedido_id = ? ORDER BY id', [pedidoId]);
-  return rows;
-}
-
-export async function cancelar(connection, pedidoId) {
-  await connection.execute("UPDATE pedidos SET estado = 'cancelado' WHERE id = ?", [pedidoId]);
-}
-
-export async function buscarAdmin(connection,id,bloquear=false) {
-  const [[row]]=await connection.execute(`SELECT * FROM pedidos WHERE id=?${bloquear?' FOR UPDATE':''}`,[id]);return row;
-}
-export async function cambiarEstado(connection,id,estado) { await connection.execute('UPDATE pedidos SET estado=? WHERE id=?',[estado,id]); }
+export const historialPedido = (t, pedido_id) =>
+  HistorialEstadoPedido.findAll({
+    ...options(t),
+    where: { pedido_id },
+    attributes: ["id", "estado", "creado_en"],
+    order: [["id", "ASC"]],
+    raw: true,
+  });
+export const cambiarEstado = (t, id, estado) =>
+  Pedido.update({ estado }, { ...options(t), where: { id } });
+export const cancelar = (t, id) => cambiarEstado(t, id, "cancelado");
+export const buscarAdmin = (t, id, lock = false) =>
+  Pedido.findByPk(id, { ...options(t, lock), raw: true });

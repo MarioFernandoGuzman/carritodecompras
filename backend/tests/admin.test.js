@@ -1,42 +1,91 @@
-import { randomUUID } from 'node:crypto';
-import bcrypt from 'bcrypt';
-import request from 'supertest';
-import { beforeAll, afterAll, expect, test } from 'vitest';
-import { app } from '../src/app.js';
-import { pool } from '../src/config/db.js';
-import { env } from '../src/config/env.js';
-
-const suffix=randomUUID(), admin=request.agent(app), cliente=request.agent(app);
-let adminId,clienteId,categoriaId,productoId;
-beforeAll(async()=>{
-  if(env.DB_NAME!=='gorras_test')throw new Error('Solo gorras_test.');
-  const password=`Clave1-${suffix}`,hash=await bcrypt.hash(password,12);
-  for(const rol of ['admin','cliente']){
-    const [u]=await pool.execute('INSERT INTO usuarios (nombre,email,password_hash,rol) VALUES (?,?,?,?)',[rol,`${rol}-${suffix}@example.test`,hash,rol]);
-    if(rol==='admin')adminId=u.insertId;else clienteId=u.insertId;
-    await (rol==='admin'?admin:cliente).post('/api/auth/login').send({email:`${rol}-${suffix}@example.test`,password}).expect(200);
-  }
-  const [c]=await pool.execute('INSERT INTO categorias (nombre,slug) VALUES (?,?)',[`Admin ${suffix}`,`admin-${suffix}`]);categoriaId=c.insertId;
+import { expect, test } from "vitest";
+import { fixture, M, delivery } from "./fixture.js";
+test("admin crea y edita producto y variante, ajusta stock y consulta todos los recursos", async () => {
+  const f = await fixture();
+  const p = (
+    await f.admin
+      .post("/api/admin/productos")
+      .send({
+        nombre: `Nueva ${f.key}`,
+        categoria_id: f.category.id,
+        precio: 159,
+        variantes: [
+          {
+            color_nombre: "Negro",
+            color_hex: "#14110F",
+            talla: "S/M",
+            stock: 2,
+          },
+        ],
+      })
+      .expect(201)
+  ).body.data;
+  f.products.push(p.id);
+  let v = await M.Variante.findOne({ where: { producto_id: p.id } });
+  await f.admin
+    .post("/api/admin/inventario/ajuste")
+    .send({ varianteId: v.id, cantidad: 3, motivo: "Reposición" })
+    .expect(200);
+  expect((await v.reload()).stock).toBe(5);
+  await f.admin
+    .post("/api/admin/inventario/ajuste")
+    .send({ varianteId: v.id, cantidad: -6 })
+    .expect(409);
+  await f.admin
+    .put(`/api/admin/variantes/${v.id}`)
+    .send({
+      color_nombre: "Negro",
+      color_hex: "#14110F",
+      talla: "S/M",
+      stock: 4,
+      stock_minimo: 3,
+      activo: true,
+    })
+    .expect(200);
+  expect((await v.reload()).stock).toBe(4);
+  await f.admin
+    .post(`/api/admin/productos/${p.id}/variantes`)
+    .send({ color_nombre: "Negro", color_hex: "#14110F", talla: "S/M" })
+    .expect(409);
+  for (const url of [
+    "/api/admin/resumen",
+    "/api/admin/productos",
+    "/api/admin/inventario?bajo=1",
+    "/api/admin/inventario?agotado=1",
+    "/api/admin/inventario/movimientos",
+    "/api/admin/pedidos",
+    "/api/admin/usuarios",
+    "/api/admin/clientes",
+  ])
+    await f.admin.get(url).expect(200);
+  await f.admin.delete(`/api/admin/productos/${p.id}`).expect(200);
+  expect(await M.Producto.findByPk(p.id)).toBeNull();
 });
-afterAll(async()=>{
-  try{
-    if(productoId){await pool.execute('DELETE m FROM movimientos_inventario m JOIN variantes v ON v.id=m.variante_id WHERE v.producto_id=?',[productoId]);await pool.execute('DELETE FROM productos WHERE id=?',[productoId]);}
-    if(categoriaId)await pool.execute('DELETE FROM categorias WHERE id=?',[categoriaId]);
-    if(adminId)await pool.execute('DELETE FROM usuarios WHERE id IN (?,?)',[adminId,clienteId]);
-  }finally{await pool.end();}
-});
-test('cliente recibe 403 en resumen y administrador recibe métricas',async()=>{
-  await cliente.get('/api/admin/resumen').expect(403);
-  const r=await admin.get('/api/admin/resumen').expect(200);
-  expect(r.body.data).toHaveProperty('ventas_mes');expect(r.body.data.ventas).toHaveLength(7);
-});
-test('admin crea producto con variante y ajusta stock con movimiento registrado',async()=>{
-  const p=await admin.post('/api/admin/productos').send({nombre:`Gorra ${suffix}`,categoria_id:categoriaId,precio:149,variantes:[{color_nombre:'Negro',color_hex:'#14110F',talla:'S/M',stock:2}]}).expect(201);
-  productoId=p.body.data.id;
-  const [[v]]=await pool.execute('SELECT id,stock FROM variantes WHERE producto_id=?',[productoId]);expect(v.stock).toBe(2);
-  await admin.post('/api/admin/inventario/ajuste').send({varianteId:v.id,cantidad:3,motivo:'Reposición de prueba'}).expect(200);
-  const [[stock]]=await pool.execute('SELECT stock FROM variantes WHERE id=?',[v.id]);expect(stock.stock).toBe(5);
-  const [mov]=await pool.execute('SELECT tipo,cantidad,stock_resultante,motivo FROM movimientos_inventario WHERE variante_id=? ORDER BY id',[v.id]);
-  expect(mov[1]).toMatchObject({tipo:'ajuste',cantidad:3,stock_resultante:5,motivo:'Reposición de prueba'});
-  await admin.post('/api/admin/inventario/ajuste').send({varianteId:v.id,cantidad:-6}).expect(409);
+test("admin protege su cuenta, administra otras y desactiva productos con historial", async () => {
+  const f = await fixture();
+  await f.admin
+    .patch(`/api/admin/usuarios/${f.users[1].id}`)
+    .send({ activo: false })
+    .expect(409);
+  await f.admin
+    .patch(`/api/admin/usuarios/${f.users[2].id}`)
+    .send({ rol: "admin", activo: false })
+    .expect(200);
+  expect((await M.Usuario.findByPk(f.users[2].id)).activo).toBe(0);
+  await f.client
+    .post("/api/carrito/items")
+    .send({ varianteId: f.variants[0].id, cantidad: 1 })
+    .expect(201);
+  const p = (await f.client.post("/api/pedidos").send(delivery).expect(201))
+    .body.data;
+  const r = await f.admin
+    .delete(`/api/admin/productos/${f.product.id}`)
+    .expect(200);
+  expect(r.body.data.desactivado).toBe(true);
+  expect((await M.Producto.findByPk(f.product.id)).activo).toBe(0);
+  await f.client.get(`/api/pedidos/${p.id}`).expect(200);
+  const rows = (await f.admin.get("/api/admin/clientes")).body.data;
+  const buyer = rows.find((u) => u.id === f.users[0].id);
+  expect(buyer.total_pedidos).toBe(1);
+  expect(buyer.monto_comprado).toBe("174.00");
 });

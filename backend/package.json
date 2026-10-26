@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "build": "node --check src/app.js && node --check src/server.js && node --check src/config/env.js && node --check src/config/db.js && node --check scripts/db-setup.js && node --check scripts/create-admin.js",
+    "build": "node scripts/check-syntax.js",
     "test": "vitest run --passWithNoTests",
     "db:check": "node scripts/db-check.js",
     "db:setup": "node scripts/db-setup.js",
@@ -26,10 +26,16 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.6",
+    "sequelize": "^6.37.8",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "supertest": "^7.3.1",
     "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "sequelize": {
+      "uuid": "11.1.1"
+    }
   }
 }

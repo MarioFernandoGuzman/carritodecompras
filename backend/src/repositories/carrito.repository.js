@@ -1,63 +1,88 @@
-export async function bloquearUsuario(connection, usuarioId) {
-  await connection.execute('SELECT id FROM usuarios WHERE id = ? FOR UPDATE', [usuarioId]);
+import { Usuario, Carrito, CarritoItem, Variante } from "../models/index.js";
+import { options, plain, productJoin } from "./orm.js";
+export const bloquearUsuario = (t, id) =>
+  Usuario.findByPk(id, { ...options(t, true), attributes: ["id"] });
+export async function buscarCarrito(t, usuario_id) {
+  return (
+    await Carrito.findOne({ ...options(t), where: { usuario_id }, raw: true })
+  )?.id;
 }
-
-export async function buscarCarrito(connection, usuarioId) {
-  const [[row]] = await connection.execute('SELECT id FROM carritos WHERE usuario_id = ?', [usuarioId]);
-  return row?.id;
+export async function crearCarrito(t, usuario_id) {
+  return (await Carrito.create({ usuario_id }, options(t))).id;
 }
-
-export async function crearCarrito(connection, usuarioId) {
-  const [result] = await connection.execute('INSERT INTO carritos (usuario_id) VALUES (?)', [usuarioId]);
-  return result.insertId;
+export async function leerItems(t, carrito_id) {
+  const rows = await CarritoItem.findAll({
+    ...options(t),
+    where: { carrito_id },
+    include: [
+      { association: "variante", required: true, include: [productJoin] },
+    ],
+    order: [["variante_id", "ASC"]],
+  });
+  return rows.map((value) => {
+    const r = plain(value),
+      v = r.variante,
+      p = v.producto;
+    return {
+      id: r.id,
+      varianteId: v.id,
+      cantidad: r.cantidad,
+      nombre: p.nombre,
+      slug: p.slug,
+      precio_unitario: p.precio,
+      producto_activo: p.activo,
+      categoria_slug: p.categoria.slug,
+      color_nombre: v.color_nombre,
+      color_hex: v.color_hex,
+      talla: v.talla,
+      stock: v.stock,
+      activo: v.activo,
+    };
+  });
 }
-
-export async function leerItems(connection, carritoId) {
-  const [rows] = await connection.execute(
-    `SELECT ci.id, ci.variante_id AS varianteId, ci.cantidad, p.nombre, p.slug, p.precio AS precio_unitario,
-       p.activo AS producto_activo, c.slug AS categoria_slug, v.color_nombre, v.color_hex, v.talla, v.stock, v.activo
-     FROM carrito_items ci JOIN variantes v ON v.id = ci.variante_id
-     JOIN productos p ON p.id = v.producto_id JOIN categorias c ON c.id = p.categoria_id
-     WHERE ci.carrito_id = ? ORDER BY v.id`, [carritoId],
+export async function buscarVariante(t, id) {
+  const r = plain(
+    await Variante.findByPk(id, {
+      ...options(t),
+      include: [{ association: "producto", required: true }],
+    }),
   );
-  return rows;
-}
-
-export async function buscarVariante(connection, varianteId) {
-  const [[row]] = await connection.execute(
-    `SELECT v.id, v.stock, v.activo, p.activo AS producto_activo
-     FROM variantes v JOIN productos p ON p.id = v.producto_id WHERE v.id = ?`, [varianteId],
-  );
-  return row;
-}
-
-export async function buscarItem(connection, carritoId, itemId) {
-  const [[row]] = await connection.execute(
-    'SELECT id, variante_id AS varianteId, cantidad FROM carrito_items WHERE carrito_id = ? AND id = ?', [carritoId, itemId],
-  );
-  return row;
-}
-
-export async function cantidadDeVariante(connection, carritoId, varianteId) {
-  const [[row]] = await connection.execute('SELECT cantidad FROM carrito_items WHERE carrito_id = ? AND variante_id = ?', [carritoId, varianteId]);
-  return row?.cantidad || 0;
-}
-
-export async function guardarItem(connection, carritoId, varianteId, cantidad) {
-  await connection.execute(
-    `INSERT INTO carrito_items (carrito_id, variante_id, cantidad) VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE cantidad = ?`, [carritoId, varianteId, cantidad, cantidad],
+  return (
+    r && {
+      id: r.id,
+      stock: r.stock,
+      activo: r.activo,
+      producto_activo: r.producto.activo,
+    }
   );
 }
-
-export async function eliminarItem(connection, carritoId, itemId) {
-  await connection.execute('DELETE FROM carrito_items WHERE carrito_id = ? AND id = ?', [carritoId, itemId]);
+export async function buscarItem(t, carrito_id, id) {
+  const r = await CarritoItem.findOne({
+    ...options(t),
+    where: { carrito_id, id },
+    raw: true,
+  });
+  return r && { id: r.id, varianteId: r.variante_id, cantidad: r.cantidad };
 }
-
-export async function vaciar(connection, carritoId) {
-  await connection.execute('DELETE FROM carrito_items WHERE carrito_id = ?', [carritoId]);
+export async function cantidadDeVariante(t, carrito_id, variante_id) {
+  return (
+    (
+      await CarritoItem.findOne({
+        ...options(t),
+        where: { carrito_id, variante_id },
+        raw: true,
+      })
+    )?.cantidad || 0
+  );
 }
-
-export async function actualizarFecha(connection, carritoId) {
-  await connection.execute('UPDATE carritos SET actualizado_en = CURRENT_TIMESTAMP WHERE id = ?', [carritoId]);
-}
+export const guardarItem = (t, carrito_id, variante_id, cantidad) =>
+  CarritoItem.upsert({ carrito_id, variante_id, cantidad }, options(t));
+export const eliminarItem = (t, carrito_id, id) =>
+  CarritoItem.destroy({ ...options(t), where: { carrito_id, id } });
+export const vaciar = (t, carrito_id) =>
+  CarritoItem.destroy({ ...options(t), where: { carrito_id } });
+export const actualizarFecha = (t, id) =>
+  Carrito.update(
+    { actualizado_en: new Date() },
+    { ...options(t), where: { id } },
+  );
