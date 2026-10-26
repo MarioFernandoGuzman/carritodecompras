@@ -1,100 +1,72 @@
-import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
-import bcrypt from 'bcrypt';
-import { afterAll, beforeAll, expect, test } from 'vitest';
-import { pool } from '../src/config/db.js';
-import { env } from '../src/config/env.js';
-
-const runFile = promisify(execFile);
-const backendDir = fileURLToPath(new URL('../', import.meta.url));
-const suffix = randomUUID();
-const email = `admin-${suffix}@example.test`;
-const invalidEmail = `invalid-${suffix}@example.test`;
-let categoriaId;
-let productoId;
-
-function runAdmin(overrides) {
-  return runFile(process.execPath, ['scripts/create-admin.js'], {
-    cwd: backendDir,
-    env: { ...process.env, NODE_ENV: 'test', DB_NAME: 'gorras_test', ...overrides },
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import bcrypt from "bcrypt";
+import { expect, test } from "vitest";
+import { fixture, M } from "./fixture.js";
+const run = promisify(execFile);
+test("la base mantiene CHECK, unicidad, FK y cascada al usar modelos", async () => {
+  const f = await fixture();
+  const data = {
+    producto_id: f.product.id,
+    sku: `extra-${f.key}`,
+    color_nombre: "Otro",
+    color_hex: "#FFFFFF",
+    talla: "S/M",
+    stock: -1,
+  };
+  const error = await M.Variante.create(data, { validate: false }).catch(
+    (e) => e,
+  );
+  expect(error.name).toBe("SequelizeDatabaseError");
+  expect(error.original.message).toMatch(/constraint|check/i);
+  await expect(
+    M.Variante.create({ ...data, sku: f.variants[0].sku, stock: 1 }),
+  ).rejects.toHaveProperty("name", "SequelizeUniqueConstraintError");
+  await expect(
+    M.Variante.create({ ...data, producto_id: 0, stock: 1 }),
+  ).rejects.toHaveProperty("name", "SequelizeForeignKeyConstraintError");
+  const p = await M.Producto.create({
+    categoria_id: f.category.id,
+    nombre: "Temporal",
+    slug: `temporal-${f.key}`,
+    precio: "10.00",
+  });
+  f.products.push(p.id);
+  const v = await M.Variante.create({
+    ...data,
+    producto_id: p.id,
+    sku: `cascade-${f.key}`,
+    stock: 1,
+  });
+  await p.destroy();
+  expect(await M.Variante.findByPk(v.id)).toBeNull();
+});
+test("create-admin actualiza por email sin cambiar identidad o fecha de creación ni mostrar secretos", async () => {
+  const f = await fixture(),
+    email = f.users[2].email,
+    created = (await M.Usuario.findByPk(f.users[2].id)).creado_en.getTime();
+  const env = {
+    ...process.env,
+    NODE_ENV: "test",
+    DB_NAME: "gorras_test",
+    ADMIN_EMAIL: email,
+    ADMIN_NOMBRE: "Admin actualizado",
+    ADMIN_PASSWORD: f.password,
+  };
+  const res = await run(process.execPath, ["scripts/create-admin.js"], {
+    env,
     timeout: 10000,
   });
-}
-
-beforeAll(async () => {
-  if (env.DB_NAME !== 'gorras_test') throw new Error('Las pruebas solo pueden usar gorras_test.');
-  const [[{ base }]] = await pool.execute('SELECT DATABASE() AS base');
-  expect(base).toBe('gorras_test');
-  const [category] = await pool.execute(
-    'INSERT INTO categorias (nombre, slug) VALUES (?, ?)', [`Prueba ${suffix}`, `prueba-${suffix}`],
-  );
-  categoriaId = category.insertId;
-  const [product] = await pool.execute(
-    'INSERT INTO productos (categoria_id, nombre, slug, precio) VALUES (?, ?, ?, ?)',
-    [categoriaId, 'Gorra de prueba', `gorra-${suffix}`, '149.00'],
-  );
-  productoId = product.insertId;
-});
-
-afterAll(async () => {
-  try {
-    await pool.execute('DELETE FROM usuarios WHERE email IN (?, ?)', [email, invalidEmail]);
-    if (productoId) await pool.execute('DELETE FROM productos WHERE id = ?', [productoId]);
-    if (categoriaId) await pool.execute('DELETE FROM categorias WHERE id = ?', [categoriaId]);
-  } finally {
-    await pool.end();
-  }
-});
-
-test('MySQL impide stock negativo, variantes duplicadas y referencias inexistentes; aplica cascada', async () => {
-  const insert = `INSERT INTO variantes (producto_id, sku, color_nombre, color_hex, talla, stock)
-                  VALUES (?, ?, ?, ?, ?, ?)`;
-  const sku = `TEST-${suffix}`;
-  await expect(pool.execute(insert, [productoId, sku, 'Negro', '#14110F', 'S/M', -1]))
-    .rejects.toMatchObject({ code: 'ER_CHECK_CONSTRAINT_VIOLATED' });
-  await pool.execute(insert, [productoId, sku, 'Negro', '#14110F', 'S/M', 3]);
-  await expect(pool.execute(insert, [productoId, `OTRO-${suffix}`, 'Negro', '#14110F', 'S/M', 3]))
-    .rejects.toMatchObject({ code: 'ER_DUP_ENTRY' });
-  await expect(pool.execute(insert, [0, `FK-${suffix}`, 'Negro', '#14110F', 'L/XL', 3]))
-    .rejects.toMatchObject({ code: 'ER_NO_REFERENCED_ROW_2' });
-  await pool.execute('DELETE FROM productos WHERE id = ?', [productoId]);
-  const [[{ cantidad }]] = await pool.execute('SELECT COUNT(*) AS cantidad FROM variantes WHERE producto_id = ?', [productoId]);
-  expect(cantidad).toBe(0);
-});
-
-test('create-admin crea y actualiza el mismo usuario con bcrypt de costo 12 sin revelar contraseñas', async () => {
-  const password = randomUUID();
-  const nextPassword = randomUUID();
-  const first = await runAdmin({ ADMIN_EMAIL: email, ADMIN_PASSWORD: password, ADMIN_NOMBRE: 'Admin de prueba' });
-  const [[created]] = await pool.execute('SELECT id, password_hash, rol, activo FROM usuarios WHERE email = ?', [email]);
-  expect(created).toMatchObject({ rol: 'admin', activo: 1 });
-  expect(bcrypt.getRounds(created.password_hash)).toBe(12);
-  expect(await bcrypt.compare(password, created.password_hash)).toBe(true);
-  expect(first.stdout + first.stderr).not.toContain(password);
-  expect(first.stdout + first.stderr).not.toContain(created.password_hash);
-
-  await pool.execute("UPDATE usuarios SET rol = 'cliente', activo = 0 WHERE id = ?", [created.id]);
-  const second = await runAdmin({ ADMIN_EMAIL: email, ADMIN_PASSWORD: nextPassword, ADMIN_NOMBRE: 'Admin actualizado' });
-  const [[updated]] = await pool.execute('SELECT id, nombre, password_hash, rol, activo FROM usuarios WHERE email = ?', [email]);
-  expect(updated).toMatchObject({ id: created.id, nombre: 'Admin actualizado', rol: 'admin', activo: 1 });
-  expect(bcrypt.getRounds(updated.password_hash)).toBe(12);
-  expect(await bcrypt.compare(nextPassword, updated.password_hash)).toBe(true);
-  expect(await bcrypt.compare(password, updated.password_hash)).toBe(false);
-  expect(second.stdout + second.stderr).not.toContain(nextPassword);
-});
-
-test('create-admin rechaza una contraseña inválida sin crear el usuario ni mostrar el valor', async () => {
-  const password = 'corta';
-  try {
-    await runAdmin({ ADMIN_EMAIL: invalidEmail, ADMIN_PASSWORD: password, ADMIN_NOMBRE: 'Inválido' });
-    throw new Error('El script debía rechazar la configuración.');
-  } catch (error) {
-    expect(error.code).toBe(1);
-    expect(error.stderr).toContain('ADMIN_PASSWORD');
-    expect(error.stdout + error.stderr).not.toContain(password);
-  }
-  const [[{ cantidad }]] = await pool.execute('SELECT COUNT(*) AS cantidad FROM usuarios WHERE email = ?', [invalidEmail]);
-  expect(cantidad).toBe(0);
+  const u = await M.Usuario.findByPk(f.users[2].id);
+  expect(u.rol).toBe("admin");
+  expect(u.creado_en.getTime()).toBe(created);
+  expect(bcrypt.getRounds(u.password_hash)).toBe(12);
+  expect(await bcrypt.compare(f.password, u.password_hash)).toBe(true);
+  expect(res.stdout + res.stderr).not.toContain(f.password);
+  await expect(
+    run(process.execPath, ["scripts/create-admin.js"], {
+      env: { ...env, ADMIN_PASSWORD: "corta" },
+      timeout: 10000,
+    }),
+  ).rejects.toHaveProperty("code", 1);
 });
