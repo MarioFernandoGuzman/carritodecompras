@@ -1,0 +1,14 @@
+# Documentos de trabajo y de entrega (solo locales)
+AGENTS.md
+CLAUDE.md
+docs/
+
+# Dependencias, builds y secretos
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
