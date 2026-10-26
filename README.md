@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, MySQL y React 18. Fases 1–6: configuración, base de datos, autenticación, catálogo, carrito y pedidos con pago simulado. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Tienda de gorras con Express, MySQL y React 18. Incluye tienda, compra simulada y panel administrativo (fases 1–8). Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
 
 ## Instalar y ejecutar
 
@@ -70,7 +70,7 @@ npm test
 npm run build
 ```
 
-`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 10 pruebas verifican integridad, administrador, autenticación, permisos, carrito y checkout (éxito/snapshots y rollback por stock). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
+`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 12 pruebas verifican integridad, autenticación, carrito, checkout y administración (autorización, creación de producto/variante y ajuste registrado). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
 
 ## Autenticación
 
@@ -80,7 +80,7 @@ Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` 
 
 `JWT_SECRET` debe ser aleatorio, de al menos 32 caracteres y quedar solo en `.env`. Cambiarlo invalida sesiones existentes. El JWT dura 8 horas y se guarda en cookie `httpOnly`, `sameSite=lax`, `secure` en producción. Cada petición protegida consulta el usuario activo y su rol en MySQL. El límite de `/api/auth/*` es de 100 solicitudes por IP cada 15 minutos.
 
-`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies.
+`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`, incluso en rutas administrativas desconocidas. Para acceder usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies.
 
 ## Catálogo
 
@@ -110,7 +110,19 @@ Como cliente, agrega una gorra, completa los datos de entrega y confirma. Para p
 
 `GET /api/pedidos` lista los propios; `GET /api/pedidos/:id` devuelve detalle, snapshots y línea de tiempo (404 para otro dueño). `POST /api/pedidos/:id/cancelar` permite pendiente/pagado, devuelve existencias y registra la devolución/estado en una transacción; repetir la cancelación devuelve 409. Las rutas requieren rol cliente.
 
-`/pedido/:codigo/confirmado` muestra el resumen y admite recarga. `/mis-pedidos` permite abrir detalles y cancelar con confirmación. El contador y el drawer se vacían al comprar. El panel administrativo sigue pendiente (fase 7).
+`/pedido/:codigo/confirmado` muestra el resumen y admite recarga. `/mis-pedidos` permite abrir detalles y cancelar con confirmación. El contador y el drawer se vacían al comprar.
+
+## Administración y pulido
+
+Configura `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_NOMBRE` en `backend/.env`, ejecuta `npm run create-admin` e ingresa por `/ingresar`. El panel `/admin` tiene resumen del mes, gráfica CSS de 7 días, pedidos recientes y alertas. Las secciones Productos, Inventario, Pedidos, Usuarios y Clientes permiten gestionar la tienda; en móvil se abren desde Secciones y las tablas tienen scroll horizontal contenido.
+
+API bajo `/api/admin`, siempre con autenticación y rol admin: `GET /resumen`; `GET/POST /productos`, `PUT/DELETE /productos/:id`; `POST /productos/:id/variantes`, `PUT/DELETE /variantes/:id`; `GET /inventario?bajo=1&agotado=1&buscar=`, `POST /inventario/ajuste`, `GET /inventario/movimientos`; `GET /pedidos?estado=&usuario=`, `GET /pedidos/:id`, `PATCH /pedidos/:id/estado`; `GET /usuarios`, `PATCH /usuarios/:id`, `GET /clientes`. Búsqueda mediante `buscar`; listados hasta 200 filas y bitácora hasta 100 movimientos, apropiados para la demo.
+
+Crear un producto incluye al menos una variante. El slug se genera y mantiene único; los cambios de stock registran entradas/ajustes con motivo. Eliminar conserva como inactivo lo que ya tiene pedidos; lo nunca vendido se elimina junto con sus referencias temporales de carrito y movimientos sin pedido. El inventario nunca puede quedar negativo.
+
+Estados administrativos: pendiente → pagado → enviado → entregado; cancelar se permite desde pendiente, pagado o enviado y devuelve las existencias una sola vez. El cliente solo cancela pendiente/pagado. El administrador no puede desactivarse ni quitarse su propio rol. Clientes muestra cantidad de pedidos, monto sin cancelados e historial individual.
+
+Cargas con esqueletos, estados vacíos/errores, avisos con presentación compartida (incluido Deshacer del carrito), página 404 y recuperación global ante fallos. Los modales permiten teclado y cierre con Escape, y se respeta movimiento reducido. Una respuesta 401/403 actualiza la sesión para aplicar cambios de acceso. La revisión visual fue una sola pasada, sin refinamiento de píxeles. La revisión final y documentación de entrega quedan para la fase posterior.
 
 En `frontend/`, ejecuta `npm test` (2 pruebas de reducer/totales y CartDrawer) y `npm run build`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
 
