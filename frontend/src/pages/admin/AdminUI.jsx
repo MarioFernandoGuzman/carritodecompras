@@ -10,7 +10,11 @@ export function useAccion(){
 }
 export function Feedback({accion}){return <>{accion.error&&<p className={styles.error} role="alert">{accion.error}</p>}{accion.mensaje&&<p className={styles.notice} role="status">{accion.mensaje}</p>}</>;}
 export function Estado({recurso,children,vacio}){if(recurso.cargando)return <div className={styles.loading} role="status"><span>Cargando información…</span></div>;if(recurso.error)return <div className={styles.error} role="alert">{recurso.error}<button onClick={recurso.recargar}>Reintentar</button></div>;if(vacio)return <p className={styles.empty}>No hay resultados. Prueba otra búsqueda o agrega datos.</p>;return children;}
-export function Tabla({label,headers,children}){return <div className={styles.table} role="region" aria-label={label} tabIndex={0}><table><thead><tr>{headers.map((h)=><th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>;}
+export function Tabla({label,headers,children}){
+  const ref=useRef(null),id=useId();
+  function desplazar(direccion){ref.current?.scrollBy({left:direccion*Math.max(180,ref.current.clientWidth*.8),behavior:'auto'});}
+  return <div className={styles.tableBlock}><div className={styles.tableControls}><span>Desliza para ver todas las acciones</span><button type="button" className={styles.secondary} aria-label={`Desplazar ${label} a la izquierda`} aria-controls={id} onClick={()=>desplazar(-1)}>←</button><button type="button" className={styles.secondary} aria-label={`Desplazar ${label} a la derecha`} aria-controls={id} onClick={()=>desplazar(1)}>→</button></div><div ref={ref} id={id} className={styles.table} role="region" aria-label={label} tabIndex={0}><table><thead><tr>{headers.map((h)=><th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div></div>;
+}
 export function Buscar({onBuscar}){return <form onSubmit={(e)=>{e.preventDefault();onBuscar(new FormData(e.currentTarget).get('buscar').trim());}}><label className="soloLectores" htmlFor="admin-buscar">Buscar</label><input id="admin-buscar" name="buscar" placeholder="Buscar por nombre…" maxLength={100}/><button>Buscar</button></form>;}
 export function ModalAdmin({titulo,cerrar,children}){
   const ref=useRef(null),id=useId();
