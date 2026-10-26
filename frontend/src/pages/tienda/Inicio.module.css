@@ -1,7 +1,0 @@
-.page { max-width: 1100px; margin: auto; padding: clamp(1.25rem, 5vw, 4rem); }
-.intro { padding: clamp(3rem, 10vw, 7rem) 0; max-width: 800px; }
-.eyebrow { color: var(--color-jade); font-weight: 700; }
-.intro h1 { font-size: clamp(3rem, 9vw, 6rem); line-height: 1; letter-spacing: -.06em; margin: 1rem 0 2rem; }
-.intro p { line-height: 1.6; }
-.status { border: 1px solid var(--color-jade); border-radius: var(--radio); padding: 1.25rem; margin: 2rem 0 1rem; line-height: 1.5; }
-.page footer { border-top: 1px solid currentColor; padding-top: 1.5rem; font-size: .85rem; }
