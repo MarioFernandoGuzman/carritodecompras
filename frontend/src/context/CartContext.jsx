@@ -175,6 +175,15 @@ export function CartProvider({ children }) {
     });
   }
 
+  async function comprar(datos) {
+    return ejecutar(async () => {
+      const pedido = await solicitar('/pedidos', { method: 'POST', body: datos });
+      hidratar({ items: [], subtotal: '0.00', envio: '0.00', total: '0.00', falta_envio_gratis: config?.gratisDesde ?? null });
+      setAbierto(false); setNotificacion(null);
+      return pedido;
+    });
+  }
+
   const visibles = cargando ? [] : items;
   const totales = calcularTotales(visibles);
   const subtotal = totales.subtotal.toFixed(2);
@@ -184,7 +193,7 @@ export function CartProvider({ children }) {
     falta_envio_gratis: config ? Math.max(0, Number(config.gratisDesde) - totales.subtotal).toFixed(2) : null };
 
   return <CartContext.Provider value={{ ...resumen, items: visibles, cantidadTotal: totales.cantidadTotal, config,
-    cargando, ocupado, error, avisos, abierto, pulso, notificacion, agregar, modificar, eliminar, vaciar, esVisitante: !usuario,
+    cargando, ocupado, error, avisos, abierto, pulso, notificacion, agregar, modificar, eliminar, vaciar, comprar, esVisitante: !usuario,
     abrir: () => { setAbierto(true); recargar(); }, cerrar, recargar, descartarToast: () => setNotificacion(null),
   }}>{children}</CartContext.Provider>;
 }
