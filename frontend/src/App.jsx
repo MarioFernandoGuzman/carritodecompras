@@ -2,14 +2,18 @@ import { Route, Routes } from 'react-router-dom';
 import Inicio from './pages/tienda/Inicio.jsx';
 import Login from './pages/tienda/Login.jsx';
 import Registro from './pages/tienda/Registro.jsx';
-import Encabezado from './components/Encabezado.jsx';
+import Layout from './components/Layout.jsx';
+import Catalogo from './pages/tienda/Catalogo.jsx';
+import Producto from './pages/tienda/Producto.jsx';
 import RutaProtegida from './components/RutaProtegida.jsx';
 import RutaAdmin from './components/RutaAdmin.jsx';
 
 export default function App() {
   return (
-    <><Encabezado /><Routes>
+    <Routes><Route element={<Layout />}>
       <Route path="/" element={<Inicio />} />
+      <Route path="/gorras" element={<Catalogo />} />
+      <Route path="/gorras/:slug" element={<Producto />} />
       <Route path="/ingresar" element={<Login />} />
       <Route path="/registro" element={<Registro />} />
       <Route element={<RutaProtegida />}>
@@ -18,6 +22,6 @@ export default function App() {
         </Route>
       </Route>
       <Route path="*" element={<main><h1>Página no encontrada</h1><a href="/">Volver al inicio</a></main>} />
-    </Routes></>
+    </Route></Routes>
   );
 }
