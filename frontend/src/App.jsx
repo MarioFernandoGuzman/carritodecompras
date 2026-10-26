@@ -5,6 +5,7 @@ import Registro from './pages/tienda/Registro.jsx';
 import Layout from './components/Layout.jsx';
 import Catalogo from './pages/tienda/Catalogo.jsx';
 import Producto from './pages/tienda/Producto.jsx';
+import Carrito from './pages/tienda/Carrito.jsx';
 import RutaProtegida from './components/RutaProtegida.jsx';
 import RutaAdmin from './components/RutaAdmin.jsx';
 
@@ -14,9 +15,11 @@ export default function App() {
       <Route path="/" element={<Inicio />} />
       <Route path="/gorras" element={<Catalogo />} />
       <Route path="/gorras/:slug" element={<Producto />} />
+      <Route path="/carrito" element={<Carrito />} />
       <Route path="/ingresar" element={<Login />} />
       <Route path="/registro" element={<Registro />} />
       <Route element={<RutaProtegida />}>
+        <Route path="/checkout" element={<main><h1>Tu próxima gorra, cada vez más cerca.</h1><p>Tu sesión está lista. El proceso de compra estará disponible próximamente.</p></main>} />
         <Route element={<RutaAdmin />}>
           <Route path="/admin/*" element={<main><h1>Administración</h1><p>Tu sesión de administrador está activa.</p></main>} />
         </Route>
