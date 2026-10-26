@@ -28,6 +28,7 @@ export default function Encabezado() {
   const sesion = cargando ? <span role="status">Cargando sesión…</span> : usuario ? <>
     <span className={styles.name}>Hola, {usuario.nombre}</span>
     {usuario.rol === 'admin' && <Link to="/admin">Administración</Link>}
+    {usuario.rol === 'cliente' && <Link to="/mis-pedidos">Mis pedidos</Link>}
     <button onClick={cerrarSesion} disabled={saliendo || ocupado || (cartCargando && !cartError)}>{saliendo ? 'Cerrando…' : 'Salir'}</button>
   </> : <Link className={styles.login} to="/ingresar">Ingresar <span aria-hidden="true">↗</span></Link>;
 

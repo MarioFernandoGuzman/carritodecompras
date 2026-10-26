@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, MySQL y React 18. Fases 1–5: configuración, base de datos, autenticación, catálogo y carrito. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Tienda de gorras con Express, MySQL y React 18. Fases 1–6: configuración, base de datos, autenticación, catálogo, carrito y pedidos con pago simulado. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
 
 ## Instalar y ejecutar
 
@@ -70,7 +70,7 @@ npm test
 npm run build
 ```
 
-`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 8 pruebas verifican integridad, administrador, autenticación, permisos y carrito (operaciones, stock, concurrencia y ajustes). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
+`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 10 pruebas verifican integridad, administrador, autenticación, permisos, carrito y checkout (éxito/snapshots y rollback por stock). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
 
 ## Autenticación
 
@@ -80,7 +80,7 @@ Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` 
 
 `JWT_SECRET` debe ser aleatorio, de al menos 32 caracteres y quedar solo en `.env`. Cambiarlo invalida sesiones existentes. El JWT dura 8 horas y se guarda en cookie `httpOnly`, `sameSite=lax`, `secure` en producción. Cada petición protegida consulta el usuario activo y su rol en MySQL. El límite de `/api/auth/*` es de 100 solicitudes por IP cada 15 minutos.
 
-`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies. La compra sigue pendiente.
+`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies.
 
 ## Catálogo
 
@@ -100,7 +100,17 @@ API de cliente autenticado: `GET /api/carrito`, `POST /api/carrito/items` (`vari
 
 `GET /api/carrito/configuracion` es público para que el visitante use la misma tarifa y umbral que el servidor. Se definen únicamente en `backend/src/config/envio.js`: Q 25.00 y envío gratis desde Q 300.00. Un carrito vacío tiene envío cero. Los totales autenticados se calculan en centavos desde los precios de MySQL; el cliente no envía precios.
 
-Pagar dirige a `/checkout`: pide sesión y regresa al marcador protegido después de ingresar. Todavía no crea pedidos ni procesa pagos; corresponde a la fase 6.
+Pagar dirige a `/checkout`: pide sesión y regresa después de ingresar. Sigue Datos → Pago → Confirmar. El pago es de demostración: tarjeta crea un pedido pagado y contra entrega uno pendiente. No se realiza ningún cargo.
+
+## Checkout y pedidos
+
+Como cliente, agrega una gorra, completa los datos de entrega y confirma. Para probar tarjeta usa `4242 4242 4242 4242` con vencimiento futuro (por ejemplo `12/30`). El navegador valida Luhn, marca Visa/Mastercard y fecha; al pasar a Confirmar descarta número/fecha y conserva solo marca y últimos 4. No se solicita CVV. La API rechaza campos ajenos al esquema, incluidos números completos, CVV o montos.
+
+`POST /api/pedidos` recibe `nombre_destinatario`, `telefono_contacto`, `direccion_envio`, `ciudad`, `notas` opcional, `metodo_pago` y, solo para tarjeta, `pago_marca`/`pago_ultimos4`. En una transacción bloquea usuario y variantes por ID ascendente, calcula importes desde MySQL, crea snapshots/código `VIS-000123`, descuenta stock, registra movimientos/historial y vacía el carrito. Una falta de stock devuelve 409 sin aplicar cambios y la interfaz vuelve al carrito con el aviso. Los errores inesperados también hacen rollback y devuelven un error genérico.
+
+`GET /api/pedidos` lista los propios; `GET /api/pedidos/:id` devuelve detalle, snapshots y línea de tiempo (404 para otro dueño). `POST /api/pedidos/:id/cancelar` permite pendiente/pagado, devuelve existencias y registra la devolución/estado en una transacción; repetir la cancelación devuelve 409. Las rutas requieren rol cliente.
+
+`/pedido/:codigo/confirmado` muestra el resumen y admite recarga. `/mis-pedidos` permite abrir detalles y cancelar con confirmación. El contador y el drawer se vacían al comprar. El panel administrativo sigue pendiente (fase 7).
 
 En `frontend/`, ejecuta `npm test` (2 pruebas de reducer/totales y CartDrawer) y `npm run build`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
 

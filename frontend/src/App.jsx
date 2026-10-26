@@ -6,6 +6,9 @@ import Layout from './components/Layout.jsx';
 import Catalogo from './pages/tienda/Catalogo.jsx';
 import Producto from './pages/tienda/Producto.jsx';
 import Carrito from './pages/tienda/Carrito.jsx';
+import Checkout from './pages/tienda/Checkout.jsx';
+import ConfirmacionPedido from './pages/tienda/ConfirmacionPedido.jsx';
+import MisPedidos from './pages/tienda/MisPedidos.jsx';
 import RutaProtegida from './components/RutaProtegida.jsx';
 import RutaAdmin from './components/RutaAdmin.jsx';
 
@@ -19,7 +22,9 @@ export default function App() {
       <Route path="/ingresar" element={<Login />} />
       <Route path="/registro" element={<Registro />} />
       <Route element={<RutaProtegida />}>
-        <Route path="/checkout" element={<main><h1>Tu próxima gorra, cada vez más cerca.</h1><p>Tu sesión está lista. El proceso de compra estará disponible próximamente.</p></main>} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/pedido/:codigo/confirmado" element={<ConfirmacionPedido />} />
+        <Route path="/mis-pedidos" element={<MisPedidos />} />
         <Route element={<RutaAdmin />}>
           <Route path="/admin/*" element={<main><h1>Administración</h1><p>Tu sesión de administrador está activa.</p></main>} />
         </Route>
