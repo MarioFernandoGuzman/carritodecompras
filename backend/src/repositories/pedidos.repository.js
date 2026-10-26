@@ -46,10 +46,10 @@ export async function cambiarStock(connection, varianteId, cantidad) {
   await connection.execute('UPDATE variantes SET stock = stock + ? WHERE id = ?', [cantidad, varianteId]);
 }
 
-export async function movimiento(connection, { varianteId, tipo, cantidad, stock, usuarioId, pedidoId }) {
+export async function movimiento(connection, { varianteId, tipo, cantidad, stock, usuarioId, pedidoId, motivo = null }) {
   await connection.execute(
-    `INSERT INTO movimientos_inventario (variante_id, tipo, cantidad, stock_resultante, usuario_id, pedido_id)
-     VALUES (?, ?, ?, ?, ?, ?)`, [varianteId, tipo, cantidad, stock, usuarioId, pedidoId],
+    `INSERT INTO movimientos_inventario (variante_id, tipo, cantidad, stock_resultante, usuario_id, pedido_id, motivo)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`, [varianteId, tipo, cantidad, stock, usuarioId, pedidoId, motivo],
   );
 }
 
@@ -93,3 +93,8 @@ export async function historialPedido(connection, pedidoId) {
 export async function cancelar(connection, pedidoId) {
   await connection.execute("UPDATE pedidos SET estado = 'cancelado' WHERE id = ?", [pedidoId]);
 }
+
+export async function buscarAdmin(connection,id,bloquear=false) {
+  const [[row]]=await connection.execute(`SELECT * FROM pedidos WHERE id=?${bloquear?' FOR UPDATE':''}`,[id]);return row;
+}
+export async function cambiarEstado(connection,id,estado) { await connection.execute('UPDATE pedidos SET estado=? WHERE id=?',[estado,id]); }

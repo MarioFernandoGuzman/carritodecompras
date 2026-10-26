@@ -79,10 +79,7 @@ export const crearPedido = (usuarioId, datos) => transaccion(usuarioId, async (c
   return detalle(connection, usuarioId, id);
 });
 
-export const cancelarPedido = (usuarioId, id) => transaccion(usuarioId, async (connection) => {
-  const pedido = await repository.buscar(connection, usuarioId, id, true);
-  if (!pedido) throw new HttpError(404, 'No encontramos ese pedido.');
-  if (!['pendiente', 'pagado'].includes(pedido.estado)) throw new HttpError(409, 'Este pedido ya no se puede cancelar.');
+async function devolverInventario(connection,usuarioId,id) {
   const items = await repository.itemsPedido(connection, id);
   const variantes = new Map();
   for (const item of items) variantes.set(item.variante_id, await repository.bloquearVariante(connection, item.variante_id));
@@ -93,7 +90,25 @@ export const cancelarPedido = (usuarioId, id) => transaccion(usuarioId, async (c
     await repository.movimiento(connection, { varianteId: item.variante_id, tipo: 'devolucion_cancelacion', cantidad: item.cantidad,
       stock: variante.stock + item.cantidad, usuarioId, pedidoId: id });
   }
-  await repository.cancelar(connection, id);
-  await repository.historial(connection, id, 'cancelado', usuarioId);
-  return detalle(connection, usuarioId, id);
+}
+
+export const cancelarPedido = (usuarioId, id) => transaccion(usuarioId, async (connection) => {
+  const pedido = await repository.buscar(connection, usuarioId, id, true);
+  if (!pedido) throw new HttpError(404, 'No encontramos ese pedido.');
+  if (!['pendiente', 'pagado'].includes(pedido.estado)) throw new HttpError(409, 'Este pedido ya no se puede cancelar.');
+  await devolverInventario(connection,usuarioId,id);
+  await repository.cancelar(connection,id);await repository.historial(connection,id,'cancelado',usuarioId);
+  return detalle(connection,usuarioId,id);
+});
+
+export async function obtenerPedidoAdmin(id) {
+  const con=await pool.getConnection();try{const p=await repository.buscarAdmin(con,id);if(!p)throw new HttpError(404,'No encontramos ese pedido.');return await detalle(con,p.usuario_id,id,p);}finally{con.release();}
+}
+export const cambiarEstadoAdmin=(actor,id,estado)=>transaccion(actor,async(con)=>{
+  const p=await repository.buscarAdmin(con,id,true);if(!p)throw new HttpError(404,'No encontramos ese pedido.');
+  const transiciones={pendiente:['pagado','cancelado'],pagado:['enviado','cancelado'],enviado:['entregado','cancelado'],entregado:[],cancelado:[]};
+  if(!transiciones[p.estado].includes(estado))throw new HttpError(409,'Ese cambio de estado no está permitido. Actualiza el pedido.');
+  if(estado==='cancelado')await devolverInventario(con,actor,id);
+  await repository.cambiarEstado(con,id,estado);await repository.historial(con,id,estado,actor);
+  return detalle(con,p.usuario_id,id);
 });
