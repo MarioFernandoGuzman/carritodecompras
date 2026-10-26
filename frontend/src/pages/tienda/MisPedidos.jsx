@@ -5,6 +5,7 @@ import { solicitar } from '../../api/cliente.js';
 import { useCart } from '../../context/CartContext.jsx';
 import DetallePedido, { EstadoPedido } from '../../components/DetallePedido.jsx';
 import CapSvg from '../../components/CapSvg.jsx';
+import Carga from '../../components/Carga.jsx';
 import { moneda } from '../../utils/moneda.js';
 import { fechaPedido } from '../../utils/checkout.js';
 import styles from '../../components/Pedidos.module.css';
@@ -48,6 +49,6 @@ function FilaPedido({ pedido }) {
 export default function MisPedidos() {
   const recurso = useRecurso('/pedidos');
   return <main className={styles.page}><p className={styles.eyebrow}>CADA ELECCIÓN TIENE SU HISTORIA</p><h1>Mis pedidos.</h1>
-    {recurso.cargando ? <p role="status">Cargando tus pedidos…</p> : recurso.error ? <div className={styles.error} role="alert">{recurso.error} <button onClick={recurso.recargar}>Reintentar</button></div> : !recurso.data.length ? <div className={styles.empty}><CapSvg color="#1F6F54" tamano={220} /><h2>Tu historia empieza con una gorra.</h2><p>Aquí encontrarás tus pedidos y su estado.</p><Link className={styles.secondary} to="/gorras">Ver gorras ↗</Link></div> : recurso.data.map((pedido) => <FilaPedido key={pedido.id} pedido={pedido} />)}
+    {recurso.cargando ? <Carga texto="Cargando tus pedidos…"/> : recurso.error ? <div className={styles.error} role="alert">{recurso.error} <button onClick={recurso.recargar}>Reintentar</button></div> : !recurso.data.length ? <div className={styles.empty}><CapSvg color="#1F6F54" tamano={220} /><h2>Tu historia empieza con una gorra.</h2><p>Aquí encontrarás tus pedidos y su estado.</p><Link className={styles.secondary} to="/gorras">Ver gorras ↗</Link></div> : recurso.data.map((pedido) => <FilaPedido key={pedido.id} pedido={pedido} />)}
   </main>;
 }

@@ -14,7 +14,7 @@ export function Tabla({label,headers,children}){return <div className={styles.ta
 export function Buscar({onBuscar}){return <form onSubmit={(e)=>{e.preventDefault();onBuscar(new FormData(e.currentTarget).get('buscar').trim());}}><label className="soloLectores" htmlFor="admin-buscar">Buscar</label><input id="admin-buscar" name="buscar" placeholder="Buscar por nombre…" maxLength={100}/><button>Buscar</button></form>;}
 export function ModalAdmin({titulo,cerrar,children}){
   const ref=useRef(null),id=useId();
-  useEffect(()=>{const node=ref.current;node.showModal();return()=>node.close();},[]);
+  useEffect(()=>{const node=ref.current;if(!node.open)node.showModal();},[]);
   function tab(e){if(e.key!=='Tab')return;const list=[...ref.current.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])')].filter((n)=>n.getClientRects().length);if(e.shiftKey&&document.activeElement===list[0]){e.preventDefault();list.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===list.at(-1)){e.preventDefault();list[0]?.focus();}}
   return <dialog ref={ref} className={styles.modal} aria-labelledby={id} onClose={cerrar} onKeyDown={tab}><header><h2 id={id}>{titulo}</h2><button type="button" onClick={cerrar} aria-label="Cerrar panel">✕</button></header>{children}</dialog>;
 }

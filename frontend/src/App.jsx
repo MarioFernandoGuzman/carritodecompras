@@ -13,6 +13,7 @@ import RutaProtegida from './components/RutaProtegida.jsx';
 import RutaAdmin from './components/RutaAdmin.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import { Dashboard,ProductosAdmin,InventarioAdmin,PedidosAdmin,PersonasAdmin } from './pages/admin/AdminPages.jsx';
+import NoEncontrada from './components/NoEncontrada.jsx';
 
 export default function App() {
   return (
@@ -30,10 +31,11 @@ export default function App() {
         <Route element={<RutaAdmin />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Dashboard />}/><Route path="productos" element={<ProductosAdmin />}/><Route path="inventario" element={<InventarioAdmin />}/><Route path="pedidos" element={<PedidosAdmin />}/><Route path="usuarios" element={<PersonasAdmin />}/><Route path="clientes" element={<PersonasAdmin clientes />}/>
+            <Route path="*" element={<NoEncontrada />}/>
           </Route>
         </Route>
       </Route>
-      <Route path="*" element={<main><h1>Página no encontrada</h1><a href="/">Volver al inicio</a></main>} />
+      <Route path="*" element={<NoEncontrada />} />
     </Route></Routes>
   );
 }

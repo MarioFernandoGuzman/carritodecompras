@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useCart } from '../../context/CartContext.jsx';
 import { ItemsPedido, TotalesPedido } from '../../components/DetallePedido.jsx';
+import Carga from '../../components/Carga.jsx';
 import { validarDatos, validarTarjeta, marcaTarjeta } from '../../utils/checkout.js';
 import styles from '../../components/Pedidos.module.css';
 
@@ -63,7 +64,7 @@ export default function Checkout() {
   }
 
   if (usuario.rol !== 'cliente') return <main><h1>Compra con tu cuenta de cliente.</h1><Link to="/gorras">Ver gorras</Link></main>;
-  if (cart.cargando) return <main role="status">{cart.error ? <><p role="alert">{cart.error}</p><button onClick={cart.recargar}>Actualizar carrito</button></> : 'Preparando tu pedido…'}</main>;
+  if (cart.cargando) return <main>{cart.error ? <><p role="alert">{cart.error}</p><button onClick={cart.recargar}>Actualizar carrito</button></> : <Carga texto="Preparando tu pedido…"/>}</main>;
   if (!cart.items.length) return <main className={styles.page}><div className={styles.empty}><h1>Primero, encuentra tu gorra.</h1><p>Tu carrito está vacío.</p><Link className={styles.secondary} to="/gorras">Ver gorras ↗</Link></div></main>;
 
   return <main className={styles.page}><p className={styles.eyebrow}>ESTÁS A UN PASO DE TU ESTILO</p><h1>Hazla tuya.</h1>
