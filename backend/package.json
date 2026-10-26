@@ -9,9 +9,12 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "build": "node --check src/app.js && node --check src/server.js && node --check src/config/env.js && node --check src/config/db.js",
+    "build": "node --check src/app.js && node --check src/server.js && node --check src/config/env.js && node --check src/config/db.js && node --check scripts/db-setup.js && node --check scripts/create-admin.js",
     "test": "vitest run --passWithNoTests",
-    "db:check": "node scripts/db-check.js"
+    "db:check": "node scripts/db-check.js",
+    "db:setup": "node scripts/db-setup.js",
+    "db:setup:test": "node scripts/db-setup.js --test",
+    "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
