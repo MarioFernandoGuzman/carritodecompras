@@ -1,12 +1,12 @@
 import * as repository from '../repositories/catalogo.repository.js';
 import { HttpError } from '../utils/HttpError.js';
+import { estiloGorra } from '../utils/estiloGorra.js';
 
 function productoPublico(row) {
-  const estilos = { snapback: 'snapback', 'dad-hat': 'dad', trucker: 'trucker' };
   return {
     id: row.id, nombre: row.nombre, slug: row.slug, precio: row.precio, destacado: Boolean(row.destacado),
     categoria: { id: row.categoria_id, nombre: row.categoria_nombre, slug: row.categoria_slug },
-    estilo: estilos[row.categoria_slug] || (row.slug.startsWith('beanie-') ? 'beanie' : 'bucket'),
+    estilo: estiloGorra(row.categoria_slug, row.slug),
   };
 }
 
