@@ -1,9 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
+
 :root {
   --color-fondo: #F6F1E7;
   --color-texto: #14110F;
   --color-jade: #1F6F54;
   --color-naranja: #E4572E;
   --color-maiz: #F2B84B;
-  --fuente-texto: Arial, sans-serif;
+  --color-crema: #F6F1E7;
+  --color-superficie: #FFFCF6;
+  --color-borde: #C9C2B7;
+  --color-texto-suave: #615B54;
+  --color-error: #A42C16;
+  --fuente-texto: 'DM Sans', Arial, sans-serif;
+  --fuente-titulos: 'Syne', Arial, sans-serif;
   --radio: 1.25rem;
 }

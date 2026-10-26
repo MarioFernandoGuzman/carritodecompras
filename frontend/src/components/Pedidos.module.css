@@ -1,0 +1,57 @@
+.page { max-width: 1200px; margin: auto; padding: 2.5rem 1.25rem 4rem; }
+.eyebrow { color: var(--color-jade); font-weight: 700; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; }
+.page > h1 { font: 800 clamp(2.2rem, 5vw, 3.8rem)/1.1 var(--fuente-titulos); letter-spacing: -.06em; margin: .75rem 0 1.5rem; }
+.steps { display: flex; list-style: none; gap: .65rem; padding: 0; margin: 2rem 0; counter-reset: paso; }
+.steps li { flex: 1; font-size: .8rem; padding: .75rem .25rem; border-top: 3px solid var(--color-borde); color: var(--color-texto-suave); }
+.steps li[aria-current="step"] { border-color: var(--color-jade); color: var(--color-jade); font-weight: 700; }
+.layout { display: grid; gap: 2rem; align-items: start; }
+.form { border: 1px solid var(--color-borde); background: var(--color-superficie); border-radius: 1rem; padding: 1.5rem; min-width: 0; }
+.form h2 { font: 700 1.5rem var(--fuente-titulos); letter-spacing: -.04em; margin-top: 0; }
+.form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.field { margin-bottom: 1.25rem; }
+.field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .5rem; }
+.field input, .field textarea { width: 100%; min-width: 0; min-height: 46px; padding: .8rem; border: 1px solid var(--color-borde); border-radius: .6rem; font: inherit; background: var(--color-fondo); color: var(--color-texto); }
+.field input[aria-invalid="true"], .field textarea[aria-invalid="true"] { border-color: var(--color-error); }
+.field textarea { resize: vertical; min-height: 80px; }
+.fieldError { font-size: .75rem; color: var(--color-error); line-height: 1.5; margin: .4rem 0; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+.actions a, .secondary { min-height: 44px; padding: .75rem; display: inline-flex; align-items: center; gap: .5rem; font: inherit; }
+.secondary { background: transparent; color: var(--color-jade); border: 1px solid var(--color-borde); border-radius: .6rem; }
+.actions > button[type="submit"] { flex: 1; border-radius: .6rem; }
+.resumen { border-radius: 1rem; padding: 1.5rem; background: #EAE5D9; min-width: 0; }
+.resumen > h2 { font: 700 1.3rem var(--fuente-titulos); margin: 0 0 1rem; letter-spacing: -.04em; }
+.items { list-style: none; padding: 0; margin: 0; }
+.items li { display: grid; grid-template-columns: 55px minmax(0, 1fr); gap: .75rem; border-bottom: 1px solid var(--color-borde); padding: 1rem 0; align-items: center; }
+.items li > strong { grid-column: 2; font-size: .85rem; }
+.items strong { font-size: .85rem; overflow-wrap: anywhere; }
+.items p { margin: .3rem 0; font-size: .75rem; color: var(--color-texto-suave); line-height: 1.5; }
+.cap { background: #DCE5D6; border-radius: .5rem; min-width: 0; }
+.totales { margin: 1rem 0; }
+.totales > div { display: flex; justify-content: space-between; gap: .75rem; padding: .75rem 0; font-size: .9rem; }
+.totales dd { margin: 0; }.totales > div:last-child { border-top: 1px solid var(--color-borde); font-weight: 700; font-size: 1.05rem; }
+.aviso { border-left: 3px solid var(--color-jade); background: #E1EAD9; padding: 1rem; font-size: .85rem; line-height: 1.6; border-radius: .4rem; margin-bottom: 1.5rem; }
+.error { padding: 1rem; background: #FCE6DE; color: var(--color-error); border-radius: .5rem; font-size: .85rem; line-height: 1.6; margin: 1rem 0; }
+.metodos { display: grid; gap: .75rem; margin-bottom: 1.5rem; }
+.metodos label { display: flex; align-items: center; gap: .75rem; min-height: 52px; border: 1px solid var(--color-borde); border-radius: .6rem; padding: .75rem; cursor: pointer; }
+.metodos input { width: 20px; height: 20px; accent-color: var(--color-jade); }
+.nota { color: var(--color-texto-suave); font-size: .75rem; line-height: 1.6; }
+.confirmacion { max-width: 750px; }
+.detalle { border: 1px solid var(--color-borde); border-radius: 1rem; padding: 1.25rem; margin: 1.5rem 0; min-width: 0; }
+.encabezado { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; }
+.encabezado h2 { font: 700 1.25rem var(--fuente-titulos); margin: .5rem 0; }
+.badge { padding: .45rem .75rem; border-radius: 2rem; font-size: .75rem; font-weight: 700; }
+.pendiente { background: #F5E2B9; color: #5F4312; }.pagado { background: #D9E9DB; color: #1F5840; }.enviado { background: #DDEAF4; color: #234E70; }.entregado { background: var(--color-jade); color: white; }.cancelado { background: #F8DEDB; color: #902714; }
+.datos { line-height: 1.65; font-size: .85rem; overflow-wrap: anywhere; border-top: 1px solid var(--color-borde); padding-top: 1rem; }
+.detalle h3 { font: 700 1rem var(--fuente-titulos); }
+.timeline { list-style: none; margin: 1.25rem 0; padding: 0 0 0 1.25rem; border-left: 2px solid var(--color-jade); }
+.timeline li { padding: .25rem 0 1rem .75rem; position: relative; font-size: .8rem; }
+.timeline li::before { content: ''; position: absolute; left: -1.6rem; top: .45rem; width: .6rem; height: .6rem; border-radius: 50%; background: var(--color-jade); }
+.timeline time { display: block; color: var(--color-texto-suave); margin-top: .4rem; }
+.order { border-bottom: 1px solid var(--color-borde); padding: 1.5rem 0; }
+.orderMeta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; font-size: .8rem; margin: .75rem 0; }
+.order > .encabezado h2 { font-size: 1.1rem; }
+.empty { text-align: center; padding: 3rem 1rem; display: grid; justify-items: center; gap: .75rem; }
+.empty h2 { font: 700 1.5rem var(--fuente-titulos); }.empty p { line-height: 1.6; color: var(--color-texto-suave); }
+.dialog { border: 0; border-radius: 1rem; padding: 1.5rem; width: min(92vw, 430px); background: var(--color-fondo); color: var(--color-texto); }
+.dialog::backdrop { background: #14110F88; }.dialog h2 { font-size: 1.4rem; }.dialog p { line-height: 1.6; }
+@media (min-width: 800px) { .page { padding: 3rem 2rem 5rem; } .layout { grid-template-columns: minmax(0, 1fr) 350px; gap: 2.5rem; } .resumen { position: sticky; top: 1rem; } .detalle { padding: 1.75rem; } .items li { grid-template-columns: 65px minmax(0, 1fr) auto; } .items li > strong { grid-column: 3; } }
