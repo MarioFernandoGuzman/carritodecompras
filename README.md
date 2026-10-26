@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, MySQL y React 18. Fases 1–4: configuración, base de datos, autenticación y catálogo. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Tienda de gorras con Express, MySQL y React 18. Fases 1–5: configuración, base de datos, autenticación, catálogo y carrito. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
 
 ## Instalar y ejecutar
 
@@ -70,7 +70,7 @@ npm test
 npm run build
 ```
 
-`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 6 pruebas verifican integridad, provisión del administrador, registro, login/cookie, usuarios inactivos, logout y permisos. Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
+`db:setup:test` equivale a `npm run db:setup -- --test`: recrea únicamente las tablas de `gorras_test`, sin semillas. No modifica las tablas de `gorras_db`. Vitest fuerza `NODE_ENV=test` y `DB_NAME=gorras_test`; usa las mismas credenciales MySQL del `.env`. Las 8 pruebas verifican integridad, administrador, autenticación, permisos y carrito (operaciones, stock, concurrencia y ajustes). Limpian sus datos al terminar. Ejecuta el setup antes de las pruebas por primera vez o tras cambiar el esquema.
 
 ## Autenticación
 
@@ -80,7 +80,7 @@ Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` 
 
 `JWT_SECRET` debe ser aleatorio, de al menos 32 caracteres y quedar solo en `.env`. Cambiarlo invalida sesiones existentes. El JWT dura 8 horas y se guarda en cookie `httpOnly`, `sameSite=lax`, `secure` en producción. Cada petición protegida consulta el usuario activo y su rol en MySQL. El límite de `/api/auth/*` es de 100 solicitudes por IP cada 15 minutos.
 
-`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies. Carrito y compra siguen pendientes.
+`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies. La compra sigue pendiente.
 
 ## Catálogo
 
@@ -88,9 +88,21 @@ Rutas públicas: `GET /api/categorias`, `GET /api/productos` y `GET /api/product
 
 La búsqueda usa FULLTEXT con prefijos de palabras de 3 o más caracteres y LIKE escapado para búsquedas cortas. Solo se muestran productos activos con variantes activas. El listado devuelve productos con categoría, colores y estado agotado, más `paginacion`; se resuelve con dos consultas, sin N+1. Color y talla deben coincidir en una misma variante. El indicador agotado considera todas las variantes activas del producto, independientemente del filtro.
 
-Abre `/gorras`, aplica filtros, busca y usa Atrás: la URL conserva el estado. En móvil, Menú y Filtros abren paneles inferiores con cierre por Escape. En `/gorras/snapback-volcan`, el color negro tiene S/M agotada y deshabilitada; en Dad Hat Atitlán, verde jade L/XL muestra las últimas 2 unidades. Las gorras son SVG propios, sin imágenes externas. El carrito sigue en 0 y Agregar permanece deshabilitado hasta la fase 5.
+Abre `/gorras`, aplica filtros, busca y usa Atrás: la URL conserva el estado. En móvil, Menú y Filtros abren paneles inferiores con cierre por Escape. En `/gorras/snapback-volcan`, el color negro tiene S/M agotada y deshabilitada; en Dad Hat Atitlán, verde jade L/XL muestra las últimas 2 unidades. Las gorras son SVG propios, sin imágenes externas.
 
-En `frontend/`, ejecuta `npm test` y `npm run build`. Aún no hay pruebas de interfaz: Vitest permite esa ausencia con `--passWithNoTests`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
+## Carrito
+
+Agrega una variante desde el detalle. El contador abre un drawer con cantidades, eliminar/deshacer, progreso al envío gratis y totales. `/carrito` ofrece el mismo contenido y permite vaciarlo. Se vuelve a comprobar stock al abrir, entrar a la página o recuperar el foco; las cantidades que ya no estén disponibles se ajustan con aviso. El carrito no reserva ni descuenta existencias.
+
+Visitantes: `localStorage` guarda solo IDs, cantidades y slugs; los precios y el stock se consultan al servidor. Al ingresar o registrarse se fusiona con el carrito de la cuenta y se elimina el local solo tras una respuesta correcta. La petición inicial se comparte durante el montaje doble de React StrictMode. Si el navegador bloquea el almacenamiento, se conserva en memoria y se avisa. Las cuentas admin no realizan compras.
+
+API de cliente autenticado: `GET /api/carrito`, `POST /api/carrito/items` (`varianteId`, `cantidad`), `PATCH /api/carrito/items/:id` (`cantidad`), `DELETE /api/carrito/items/:id`, `DELETE /api/carrito`, `POST /api/carrito/fusionar` (`items: [{ varianteId, cantidad }]`, máximo 100). Las mutaciones devuelven el carrito completo. Un exceso de stock devuelve 409 con `error.detalles.stock`; fusionar recorta e ignora variantes no disponibles.
+
+`GET /api/carrito/configuracion` es público para que el visitante use la misma tarifa y umbral que el servidor. Se definen únicamente en `backend/src/config/envio.js`: Q 25.00 y envío gratis desde Q 300.00. Un carrito vacío tiene envío cero. Los totales autenticados se calculan en centavos desde los precios de MySQL; el cliente no envía precios.
+
+Pagar dirige a `/checkout`: pide sesión y regresa al marcador protegido después de ingresar. Todavía no crea pedidos ni procesa pagos; corresponde a la fase 6.
+
+En `frontend/`, ejecuta `npm test` (2 pruebas de reducer/totales y CartDrawer) y `npm run build`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
 
 ## Estructura
 
