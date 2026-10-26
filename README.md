@@ -1,6 +1,6 @@
 # VISERA · Tienda de gorras
 
-Tienda de gorras con Express, MySQL y React 18. Fases 1–3: configuración, base de datos y autenticación. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
+Tienda de gorras con Express, MySQL y React 18. Fases 1–4: configuración, base de datos, autenticación y catálogo. Requiere Node.js **20.19+** (o 22.12+/24+), npm y MySQL **8.0.16+** (por las restricciones CHECK).
 
 ## Instalar y ejecutar
 
@@ -24,7 +24,7 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Abre [la aplicación](http://127.0.0.1:5173). Debe mostrar **“Conexión con el servidor correcta.”**. El botón permite repetir la comprobación. La [API de salud](http://127.0.0.1:3000/api/salud) devuelve `{ "ok": true }`.
+Abre [la aplicación](http://127.0.0.1:5173): Inicio muestra categorías y destacados; `/gorras` permite explorar el catálogo. La [API de salud](http://127.0.0.1:3000/api/salud) devuelve `{ "ok": true }`.
 
 Usa `127.0.0.1` en ambas direcciones. Si cambias puertos u origen, ajusta `PORT` y `FRONTEND_URL` en `backend/.env`, y `VITE_API_URL` en `frontend/.env`; reinicia los servidores.
 
@@ -80,7 +80,15 @@ Endpoints: `POST /api/auth/registro` (`nombre`, `email`, `password`, `telefono` 
 
 `JWT_SECRET` debe ser aleatorio, de al menos 32 caracteres y quedar solo en `.env`. Cambiarlo invalida sesiones existentes. El JWT dura 8 horas y se guarda en cookie `httpOnly`, `sameSite=lax`, `secure` en producción. Cada petición protegida consulta el usuario activo y su rol en MySQL. El límite de `/api/auth/*` es de 100 solicitudes por IP cada 15 minutos.
 
-`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies. Catálogo y compra siguen pendientes.
+`/admin/*` exige sesión y rol admin: un visitante va a `/ingresar`; un cliente vuelve a `/`. Por ahora muestra solo la confirmación de acceso; el panel se implementará en su fase. Para acceder como admin, usa las credenciales elegidas con `npm run create-admin`. En producción, sirve frontend y API por HTTPS en el mismo sitio para conservar la política de cookies. Carrito y compra siguen pendientes.
+
+## Catálogo
+
+Rutas públicas: `GET /api/categorias`, `GET /api/productos` y `GET /api/productos/:slug`. Filtros: `categoria` (slug), `buscar`, `color` (nombre), `talla`, `min`, `max`, `orden` (`destacados`, `nuevos`, `precio_asc`, `precio_desc`), `pagina` y `limite` (máximo 48, predeterminado 12; la interfaz usa 6). Ejemplo: `/api/productos?categoria=dad-hat&min=100&max=160&orden=precio_asc`.
+
+La búsqueda usa FULLTEXT con prefijos de palabras de 3 o más caracteres y LIKE escapado para búsquedas cortas. Solo se muestran productos activos con variantes activas. El listado devuelve productos con categoría, colores y estado agotado, más `paginacion`; se resuelve con dos consultas, sin N+1. Color y talla deben coincidir en una misma variante. El indicador agotado considera todas las variantes activas del producto, independientemente del filtro.
+
+Abre `/gorras`, aplica filtros, busca y usa Atrás: la URL conserva el estado. En móvil, Menú y Filtros abren paneles inferiores con cierre por Escape. En `/gorras/snapback-volcan`, el color negro tiene S/M agotada y deshabilitada; en Dad Hat Atitlán, verde jade L/XL muestra las últimas 2 unidades. Las gorras son SVG propios, sin imágenes externas. El carrito sigue en 0 y Agregar permanece deshabilitado hasta la fase 5.
 
 En `frontend/`, ejecuta `npm test` y `npm run build`. Aún no hay pruebas de interfaz: Vitest permite esa ausencia con `--passWithNoTests`. En backend, `build` valida la sintaxis; Node ejecuta JavaScript directamente. En frontend genera `dist/`; puedes revisarlo con `npm run preview`.
 
